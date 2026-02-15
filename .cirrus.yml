@@ -11,7 +11,7 @@
 
 env:
   ELECTRON_VERSION: v40.4.1
-  GITHUB_TOKEN: ENCRYPTED[you_must_encrypt_a_token_via_cirrus_ci_settings]
+  GITHUB_TOKEN: ENCRYPTED[!b66111d4c93c1b95cc901c71d9478bd1921281af4fa918dfbd535bb3929935a2e6e9ef5083459c0eaa90834f176117a8!]
 
 macos_build_task:
   skip: $CIRRUS_TAG == ''
