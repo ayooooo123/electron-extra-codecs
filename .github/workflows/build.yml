@@ -125,6 +125,7 @@ jobs:
       - name: Reset src tree (undo previous patch run)
         run: |
           if [[ -d src ]]; then
+            find src -name "*.lock" -path "*/.git/*" -delete 2>/dev/null || true
             git -C src checkout -- . 2>/dev/null || true
             git -C src clean -fd 2>/dev/null || true
           fi
