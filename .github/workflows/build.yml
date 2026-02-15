@@ -115,7 +115,10 @@ jobs:
           if [[ ! -d "$HOME/depot_tools" ]]; then
             git clone https://chromium.googlesource.com/chromium/tools/depot_tools.git "$HOME/depot_tools"
           else
-            git -C "$HOME/depot_tools" pull
+            # gclient sync leaves depot_tools in detached HEAD — fetch+reset handles that
+            git -C "$HOME/depot_tools" fetch origin
+            git -C "$HOME/depot_tools" checkout -f main 2>/dev/null || git -C "$HOME/depot_tools" checkout -f master
+            git -C "$HOME/depot_tools" reset --hard origin/main 2>/dev/null || git -C "$HOME/depot_tools" reset --hard origin/master
           fi
           echo "$HOME/depot_tools" >> "$GITHUB_PATH"
 

@@ -1,7 +1,12 @@
 #!/usr/bin/env bash
 #
-# Patch third_party/ffmpeg/chromium/scripts/build_ffmpeg.py to add extra codec
-# flags to the Chrome branding, then regenerate ffmpeg configs for all targets.
+# Patch build_ffmpeg.py to add extra codec flags to the Chrome branding, then
+# regenerate ffmpeg configs for all targets.
+#
+# In Chromium 144+ the build/generate scripts live in media/ffmpeg/scripts/
+# while copy_config.sh remains in third_party/ffmpeg/chromium/scripts/.
+#
+# Must be run from the Chromium src/ directory.
 #
 # Usage:
 #   bash patch_ffmpeg.sh [ffmpeg-dir]          # apply and regenerate
@@ -16,8 +21,12 @@ if [[ "${1:-}" == "--check" || "${1:-}" == "--dry-run" ]]; then
 fi
 
 FFMPEG_DIR="${1:-third_party/ffmpeg}"
-SCRIPTS_DIR="$FFMPEG_DIR/chromium/scripts"
-BUILD_FFMPEG_PY="$SCRIPTS_DIR/build_ffmpeg.py"
+
+# Chromium 144+: build_ffmpeg.py and generate_gn.py moved to media/ffmpeg/scripts/
+BUILD_FFMPEG_PY="media/ffmpeg/scripts/build_ffmpeg.py"
+GENERATE_GN_PY="media/ffmpeg/scripts/generate_gn.py"
+# copy_config.sh remains in the old location
+COPY_CONFIG_SH="$FFMPEG_DIR/chromium/scripts/copy_config.sh"
 
 if [[ ! -d "$FFMPEG_DIR" ]]; then
   echo "ERROR: FFmpeg dir not found: $FFMPEG_DIR" >&2
@@ -26,6 +35,7 @@ fi
 
 if [[ ! -f "$BUILD_FFMPEG_PY" ]]; then
   echo "ERROR: build_ffmpeg.py not found: $BUILD_FFMPEG_PY" >&2
+  echo "  (expected at media/ffmpeg/scripts/build_ffmpeg.py for Chromium 144+)" >&2
   exit 1
 fi
 
@@ -156,8 +166,8 @@ for t in "${targets[@]}"; do
   python3 "$BUILD_FFMPEG_PY" "$os" "$arch"
 done
 
-bash "$SCRIPTS_DIR/copy_config.sh"
-python3 "$SCRIPTS_DIR/generate_gn.py"
+bash "$COPY_CONFIG_SH"
+python3 "$GENERATE_GN_PY"
 
 echo "Verifying generated ffmpeg config headers"
 CHECK_FILE="$FFMPEG_DIR/chromium/config/Chrome/linux/x64/config_components.h"
