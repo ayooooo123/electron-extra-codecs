@@ -150,6 +150,13 @@ jobs:
           cp -R ../electron-extra-codecs electron-extra-codecs
           bash electron-extra-codecs/scripts/apply_all.sh
 
+      - name: Install Linux sysroots
+        if: matrix.target_os == 'linux'
+        working-directory: src
+        run: |
+          python3 build/linux/sysroot_scripts/install-sysroot.py --arch=amd64
+          python3 build/linux/sysroot_scripts/install-sysroot.py --arch=arm64
+
       - name: Build Electron
         working-directory: src
         run: |
