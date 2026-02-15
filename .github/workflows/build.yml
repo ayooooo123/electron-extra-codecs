@@ -1,0 +1,176 @@
+# =============================================================================
+# WARNING — Runner requirements
+#
+# Standard GitHub-hosted runners have ~14 GB disk.  Electron/Chromium
+# from-source builds need 100+ GB.  You MUST use one of:
+#   • Self-hosted runners  — 200+ GB SSD, 32+ GB RAM
+#   • GitHub larger runners — 8-core+ tier (300 GB SSD)
+#
+# The "os" labels below are PLACEHOLDERS.  Replace them with your actual
+# self-hosted runner labels before enabling this workflow.
+#
+# GitHub enforces a hard 6-hour (360 min) per-job limit on hosted runners.
+# Electron builds commonly exceed that; self-hosted runners have no cap.
+# =============================================================================
+
+name: Build Electron Extra Codecs
+
+on:
+  workflow_dispatch:
+    inputs:
+      electron_version:
+        description: Electron git tag to build
+        required: true
+        default: v40.4.1
+  push:
+    tags:
+      - "v*-codecs"
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: ${{ matrix.name }}
+    timeout-minutes: 360
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: linux-x64
+            os: ubuntu-22.04   # PLACEHOLDER — needs self-hosted / larger runner
+            target_os: linux
+            target_cpu: x64
+          - name: linux-arm64
+            os: ubuntu-22.04   # PLACEHOLDER — needs self-hosted / larger runner
+            target_os: linux
+            target_cpu: arm64
+          - name: mac-arm64
+            os: macos-14       # PLACEHOLDER — needs self-hosted / larger runner
+            target_os: mac
+            target_cpu: arm64
+          - name: mac-x64
+            os: macos-14       # PLACEHOLDER — macos-13 removed Dec 2025
+            target_os: mac
+            target_cpu: x64
+          - name: win-x64
+            os: windows-2022   # PLACEHOLDER — needs self-hosted / larger runner
+            target_os: win
+            target_cpu: x64
+
+    runs-on: ${{ matrix.os }}
+
+    env:
+      ELECTRON_VERSION: ${{ github.event.inputs.electron_version || 'v40.4.1' }}
+
+    steps:
+      - name: Checkout patch repo
+        uses: actions/checkout@v4
+        with:
+          path: electron-extra-codecs
+
+      - name: Free disk space (linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo rm -rf /usr/share/dotnet || true
+          sudo rm -rf /usr/local/lib/android || true
+          sudo rm -rf /opt/ghc || true
+          sudo rm -rf /usr/local/share/boost || true
+          sudo apt-get clean || true
+          df -h
+
+      - name: Free disk space (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          sudo rm -rf /Applications/Xcode_15*.app/Contents/Developer/Platforms/iPhoneOS.platform/DeviceSupport || true
+          sudo rm -rf /Users/runner/Library/Android || true
+          df -h
+
+      - name: Free disk space (windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          Get-PSDrive -PSProvider FileSystem | Format-Table Name, @{n='Free(GB)';e={[math]::Round($_.Free/1GB,1)}}
+
+      - name: Install Linux build deps
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y python3 python3-pip git curl lsb-release ca-certificates
+
+      - name: Setup depot_tools
+        shell: bash
+        run: |
+          git clone https://chromium.googlesource.com/chromium/tools/depot_tools.git
+          echo "$PWD/depot_tools" >> "$GITHUB_PATH"
+
+      - name: Cache source checkout (best effort)
+        uses: actions/cache@v4
+        with:
+          path: |
+            src
+            .gclient
+          key: electron-src-${{ runner.os }}-${{ matrix.target_cpu }}-${{ env.ELECTRON_VERSION }}
+
+      - name: Sync Electron source
+        shell: bash
+        run: |
+          if [[ ! -f .gclient ]]; then
+            gclient config --name "src/electron" --unmanaged https://github.com/electron/electron
+          fi
+          gclient sync --with_branch_heads --with_tags
+          cd src/electron
+          git checkout "$ELECTRON_VERSION"
+          cd ../..
+          gclient sync -f
+
+      - name: Copy patch repo into src
+        shell: bash
+        run: |
+          rm -rf src/electron-extra-codecs
+          cp -R electron-extra-codecs src/electron-extra-codecs
+
+      - name: Apply codec patches
+        shell: bash
+        working-directory: src
+        run: |
+          bash electron-extra-codecs/scripts/apply_all.sh
+
+      - name: Build Electron
+        shell: bash
+        working-directory: src
+        run: |
+          export CHROMIUM_BUILDTOOLS_PATH="$PWD/buildtools"
+          gn_args='import("//electron/build/args/release.gn")'
+          if [[ "${{ matrix.target_cpu }}" == "arm64" && "${{ matrix.target_os }}" == "linux" ]]; then
+            gn_args+=' target_cpu="arm64"'
+          fi
+          gn gen out/Release --args="$gn_args"
+          ninja -C out/Release electron
+          if [[ "${{ runner.os }}" != "Windows" ]]; then
+            python3 electron/script/strip-binaries.py -d out/Release
+          fi
+          ninja -C out/Release electron:electron_dist_zip
+
+      - name: Upload dist artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: electron-${{ matrix.name }}-dist
+          path: src/out/Release/dist.zip
+          if-no-files-found: error
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/')
+    needs: build
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Create release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          files: artifacts/**/dist.zip
