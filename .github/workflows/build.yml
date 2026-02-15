@@ -122,16 +122,23 @@ jobs:
           fi
           echo "$HOME/depot_tools" >> "$GITHUB_PATH"
 
+      - name: Reset src tree (undo previous patch run)
+        run: |
+          if [[ -d src ]]; then
+            git -C src checkout -- . 2>/dev/null || true
+            git -C src clean -fd 2>/dev/null || true
+          fi
+
       - name: Sync Electron source
         run: |
           if [[ ! -f .gclient ]]; then
             gclient config --name "src/electron" --unmanaged https://github.com/electron/electron
           fi
-          gclient sync --with_branch_heads --with_tags
+          gclient sync --with_branch_heads --with_tags --reset
           cd src/electron
           git checkout "$ELECTRON_VERSION"
           cd ../..
-          gclient sync -f
+          gclient sync -f --reset
 
       - name: Apply codec patches
         working-directory: src
