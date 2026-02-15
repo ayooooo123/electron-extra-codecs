@@ -28,7 +28,7 @@ git checkout v40.4.1
 gclient sync -f
 
 cd ..
-git clone https://github.com/your-org/electron-extra-codecs.git
+git clone https://github.com/ayooooo123/electron-extra-codecs.git
 cd src
 bash ../electron-extra-codecs/scripts/apply_all.sh
 ```
@@ -90,30 +90,41 @@ bash ../electron-extra-codecs/scripts/apply_all.sh --check
 
 ## CI / Releases
 
-The workflow in `.github/workflows/build.yml` has three stages:
+Two CI systems build all 5 platform targets:
 
-1. **Validate** — runs on a standard GitHub runner; checks all scripts parse.
-2. **Build** — runs on self-hosted runners; builds Electron from source per platform.
-3. **Release** — uploads `electron-{os}-{arch}.zip` to a GitHub Release on tag push.
+| CI | Targets | Runner |
+|----|---------|--------|
+| **GitHub Actions** (`build.yml`) | linux-x64, linux-arm64, win32-x64 | Self-hosted ARM64 Linux box |
+| **Cirrus CI** (`.cirrus.yml`) | darwin-arm64, darwin-x64 | Cirrus CI macOS cloud (free for public repos) |
+
+Both trigger on tag push (`v*`). GitHub Actions creates the release with Linux/Windows zips; Cirrus CI appends macOS zips to the same release via `gh release upload`.
 
 ### Self-Hosted Runner Setup
 
-Register runners with these labels (or edit the matrix in `build.yml`):
+Register one runner on your ARM64 Linux box with label **`electron-builder`**:
 
-| Label | OS | Min Specs |
-|-------|----|-----------|
-| `electron-builder-linux` | Ubuntu 22.04+ | 200 GB SSD, 32 GB RAM, 8+ cores |
-| `electron-builder-macos-arm64` | macOS 14+ (Apple Silicon) | 200 GB SSD, 32 GB RAM |
-| `electron-builder-macos-x64` | macOS (Intel) | 200 GB SSD, 32 GB RAM |
-| `electron-builder-windows` | Windows 2022+ | 200 GB SSD, 32 GB RAM, VS 2022 C++ |
+| Requirement | Value |
+|-------------|-------|
+| OS | Ubuntu 22.04+ (arm64) |
+| Disk | 200+ GB SSD |
+| RAM | 32+ GB |
+| Packages | `build-essential python3 git curl` + Chromium deps |
+
+Builds run sequentially (`max-parallel: 1`) since they share one machine.
+
+### Cirrus CI Setup
+
+1. Enable Cirrus CI on the repo at [cirrus-ci.com](https://cirrus-ci.com).
+2. Add an encrypted `GITHUB_TOKEN` via Cirrus CI settings (needs `contents: write` on the repo) — replace the placeholder in `.cirrus.yml`.
+3. Free tier gives 500 macOS minutes/month (~1 full build). For more, register a [persistent worker](https://cirrus-ci.org/guide/persistent-workers/) on any Mac you have access to.
 
 ### Triggering Builds
 
 ```bash
-# Manual dispatch (any branch)
+# Manual dispatch (GitHub Actions only, any branch)
 gh workflow run build.yml -f electron_version=v40.4.1
 
-# Tag-triggered (creates a GitHub Release)
+# Tag-triggered (both CIs, creates a GitHub Release)
 git tag v40.4.1-codecs && git push origin v40.4.1-codecs
 ```
 

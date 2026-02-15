@@ -1,0 +1,74 @@
+# =============================================================================
+# Cirrus CI: macOS builds (darwin-arm64, darwin-x64)
+#
+# Free for public repos (500 macOS min/month).  A single Electron build
+# takes ~5 hrs so the free tier covers roughly 1 full build/month.
+# For more capacity, register a Cirrus CI persistent worker on your own Mac.
+#
+# On tag push, built artifacts are uploaded to the matching GitHub Release
+# (created by the GitHub Actions workflow).
+# =============================================================================
+
+env:
+  ELECTRON_VERSION: v40.4.1
+  GITHUB_TOKEN: ENCRYPTED[you_must_encrypt_a_token_via_cirrus_ci_settings]
+
+macos_build_task:
+  skip: $CIRRUS_TAG == ''
+  only_if: $CIRRUS_TAG =~ 'v.*'
+  macos_instance:
+    image: ghcr.io/cirruslabs/macos-runner:sonoma
+  timeout_in: 360m
+  matrix:
+    - env:
+        TARGET_CPU: arm64
+        ARTIFACT: electron-darwin-arm64.zip
+    - env:
+        TARGET_CPU: x64
+        ARTIFACT: electron-darwin-x64.zip
+
+  install_deps_script:
+    - xcode-select --install || true
+    - brew install python3 git
+
+  setup_depot_tools_script:
+    - git clone https://chromium.googlesource.com/chromium/tools/depot_tools.git ~/depot_tools
+    - export PATH="$HOME/depot_tools:$PATH"
+    - echo "PATH=$HOME/depot_tools:$PATH" >> $CIRRUS_ENV
+
+  sync_electron_script:
+    - mkdir -p electron-build && cd electron-build
+    - gclient config --name "src/electron" --unmanaged https://github.com/electron/electron
+    - gclient sync --with_branch_heads --with_tags
+    - cd src/electron && git checkout "$ELECTRON_VERSION" && cd ../..
+    - gclient sync -f
+
+  checkout_patches_script:
+    - cd electron-build/src
+    - git clone https://github.com/${CIRRUS_REPO_FULL_NAME}.git electron-extra-codecs
+    - cd electron-extra-codecs && git checkout "$CIRRUS_TAG" && cd ..
+
+  apply_patches_script:
+    - cd electron-build/src
+    - bash electron-extra-codecs/scripts/apply_all.sh
+
+  build_electron_script:
+    - cd electron-build/src
+    - export CHROMIUM_BUILDTOOLS_PATH="$PWD/buildtools"
+    - gn gen out/Release --args="import(\"//electron/build/args/release.gn\") target_cpu=\"$TARGET_CPU\""
+    - ninja -C out/Release electron
+    - python3 electron/script/strip-binaries.py -d out/Release
+    - ninja -C out/Release electron:electron_dist_zip
+    - cp out/Release/dist.zip "$CIRRUS_WORKING_DIR/$ARTIFACT"
+
+  upload_to_release_script:
+    - |
+      if command -v gh >/dev/null 2>&1; then
+        gh release upload "$CIRRUS_TAG" "$ARTIFACT" --repo "$CIRRUS_REPO_FULL_NAME" --clobber || true
+      else
+        brew install gh
+        gh release upload "$CIRRUS_TAG" "$ARTIFACT" --repo "$CIRRUS_REPO_FULL_NAME" --clobber || true
+      fi
+
+  artifact_binary_artifacts:
+    path: "${ARTIFACT}"
