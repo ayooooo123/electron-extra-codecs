@@ -124,8 +124,14 @@ jobs:
 
       - name: Clean previous checkout state
         run: |
-          rm -rf src
-          rm -f .gclient .gclient_entries .gclient_previous_sync_commits
+          if [[ -d src ]]; then
+            find src -name "*.lock" -path "*/.git/*" -delete 2>/dev/null || true
+            git -C src rebase --abort 2>/dev/null || true
+            git -C src am --abort 2>/dev/null || true
+            git -C src merge --abort 2>/dev/null || true
+            git -C src checkout -- . 2>/dev/null || true
+            git -C src clean -fd 2>/dev/null || true
+          fi
 
       - name: Sync Electron source
         timeout-minutes: 180
@@ -133,11 +139,7 @@ jobs:
           if [[ ! -f .gclient ]]; then
             gclient config --name "src/electron" --unmanaged https://github.com/electron/electron
           fi
-          gclient sync --with_branch_heads --with_tags --reset --verbose
-          cd src/electron
-          git checkout "$ELECTRON_VERSION"
-          cd ../..
-          gclient sync -f --reset --verbose
+          gclient sync --with_tags --revision "src/electron@$ELECTRON_VERSION" --reset --verbose
 
       - name: Apply codec patches
         working-directory: src
