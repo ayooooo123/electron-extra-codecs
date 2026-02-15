@@ -128,15 +128,16 @@ jobs:
           rm -f .gclient .gclient_entries .gclient_previous_sync_commits
 
       - name: Sync Electron source
+        timeout-minutes: 180
         run: |
           if [[ ! -f .gclient ]]; then
             gclient config --name "src/electron" --unmanaged https://github.com/electron/electron
           fi
-          gclient sync --with_branch_heads --with_tags --reset
+          gclient sync --with_branch_heads --with_tags --reset --verbose
           cd src/electron
           git checkout "$ELECTRON_VERSION"
           cd ../..
-          gclient sync -f --reset
+          gclient sync -f --reset --verbose
 
       - name: Apply codec patches
         working-directory: src
