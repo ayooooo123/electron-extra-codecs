@@ -136,10 +136,12 @@ jobs:
       - name: Sync Electron source
         timeout-minutes: 180
         run: |
+          mkdir -p "$HOME/.gclient-cache"
+          export GIT_CACHE_PATH="$HOME/.gclient-cache"
           if [[ ! -f .gclient ]]; then
             gclient config --name "src/electron" --unmanaged https://github.com/electron/electron
           fi
-          gclient sync --with_tags --revision "src/electron@$ELECTRON_VERSION" --reset --verbose
+          gclient sync --with_tags --revision "src/electron@$ELECTRON_VERSION" --reset --verbose --no-history
 
       - name: Apply codec patches
         working-directory: src
