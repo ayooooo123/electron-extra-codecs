@@ -122,13 +122,10 @@ jobs:
           fi
           echo "$HOME/depot_tools" >> "$GITHUB_PATH"
 
-      - name: Reset src tree (undo previous patch run)
+      - name: Clean previous checkout state
         run: |
-          if [[ -d src ]]; then
-            find src -name "*.lock" -path "*/.git/*" -delete 2>/dev/null || true
-            git -C src checkout -- . 2>/dev/null || true
-            git -C src clean -fd 2>/dev/null || true
-          fi
+          rm -rf src
+          rm -f .gclient .gclient_entries .gclient_previous_sync_commits
 
       - name: Sync Electron source
         run: |
