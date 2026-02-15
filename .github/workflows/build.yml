@@ -62,7 +62,7 @@ jobs:
   build:
     name: Build ${{ matrix.name }}
     needs: validate
-    runs-on: electron-builder
+    runs-on: [self-hosted, Linux, ARM64, electron-builder]
     strategy:
       fail-fast: false
       max-parallel: 1
