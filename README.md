@@ -88,9 +88,34 @@ cd src
 bash ../electron-extra-codecs/scripts/apply_all.sh --check
 ```
 
-## CI Notes
+## CI / Releases
 
-The included GitHub Actions workflow **cannot run on standard hosted runners** (14 GB disk vs 100+ GB required). You must use self-hosted runners or GitHub larger runners (8-core+, 300 GB SSD). The runner labels in the workflow are placeholders — replace them before use. See comments in `.github/workflows/build.yml`.
+The workflow in `.github/workflows/build.yml` has three stages:
+
+1. **Validate** — runs on a standard GitHub runner; checks all scripts parse.
+2. **Build** — runs on self-hosted runners; builds Electron from source per platform.
+3. **Release** — uploads `electron-{os}-{arch}.zip` to a GitHub Release on tag push.
+
+### Self-Hosted Runner Setup
+
+Register runners with these labels (or edit the matrix in `build.yml`):
+
+| Label | OS | Min Specs |
+|-------|----|-----------|
+| `electron-builder-linux` | Ubuntu 22.04+ | 200 GB SSD, 32 GB RAM, 8+ cores |
+| `electron-builder-macos-arm64` | macOS 14+ (Apple Silicon) | 200 GB SSD, 32 GB RAM |
+| `electron-builder-macos-x64` | macOS (Intel) | 200 GB SSD, 32 GB RAM |
+| `electron-builder-windows` | Windows 2022+ | 200 GB SSD, 32 GB RAM, VS 2022 C++ |
+
+### Triggering Builds
+
+```bash
+# Manual dispatch (any branch)
+gh workflow run build.yml -f electron_version=v40.4.1
+
+# Tag-triggered (creates a GitHub Release)
+git tag v40.4.1-codecs && git push origin v40.4.1-codecs
+```
 
 ## Credits
 

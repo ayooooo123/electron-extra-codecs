@@ -1,16 +1,13 @@
 # =============================================================================
-# WARNING — Runner requirements
+# Self-hosted runner requirements (per-platform):
+#   • 200+ GB SSD, 32+ GB RAM, 8+ cores recommended
+#   • Python 3, Git, Bash
+#   • Linux: Ubuntu 22.04+ with build-essential
+#   • macOS: Xcode CLT
+#   • Windows: VS 2022 with C++ workload
 #
-# Standard GitHub-hosted runners have ~14 GB disk.  Electron/Chromium
-# from-source builds need 100+ GB.  You MUST use one of:
-#   • Self-hosted runners  — 200+ GB SSD, 32+ GB RAM
-#   • GitHub larger runners — 8-core+ tier (300 GB SSD)
-#
-# The "os" labels below are PLACEHOLDERS.  Replace them with your actual
-# self-hosted runner labels before enabling this workflow.
-#
-# GitHub enforces a hard 6-hour (360 min) per-job limit on hosted runners.
-# Electron builds commonly exceed that; self-hosted runners have no cap.
+# Runner labels below use the pattern "electron-builder-<os>".
+# Register your self-hosted runners with matching labels, or edit to suit.
 # =============================================================================
 
 name: Build Electron Extra Codecs
@@ -24,44 +21,81 @@ on:
         default: v40.4.1
   push:
     tags:
-      - "v*-codecs"
+      - "v*"
 
 permissions:
   contents: write
 
+env:
+  ELECTRON_VERSION: ${{ github.event.inputs.electron_version || 'v40.4.1' }}
+
 jobs:
+  # -----------------------------------------------------------------------
+  # Validate: runs on standard runner, checks patch scripts parse correctly
+  # -----------------------------------------------------------------------
+  validate:
+    name: Validate patch scripts
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check Python syntax
+        run: python3 -c "import ast; ast.parse(open('scripts/patch_chromium_media.py').read())"
+
+      - name: Check Bash syntax
+        run: |
+          bash -n scripts/patch_ffmpeg.sh
+          bash -n scripts/apply_all.sh
+
+      - name: Check YAML syntax
+        run: python3 -c "import yaml; yaml.safe_load(open('.github/workflows/build.yml'))"
+
+      - name: Check inline Python in patch_ffmpeg.sh
+        run: |
+          python3 -c "
+          text = open('scripts/patch_ffmpeg.sh').read()
+          start = text.index(\"<<'PY'\") + len(\"<<'PY'\")
+          end = text.index('\nPY\n', start)
+          import ast; ast.parse(text[start:end])
+          "
+
+  # -----------------------------------------------------------------------
+  # Build: one job per platform, requires self-hosted runners
+  # -----------------------------------------------------------------------
   build:
-    name: ${{ matrix.name }}
-    timeout-minutes: 360
+    name: Build ${{ matrix.name }}
+    needs: validate
     strategy:
       fail-fast: false
       matrix:
         include:
           - name: linux-x64
-            os: ubuntu-22.04   # PLACEHOLDER — needs self-hosted / larger runner
+            runner: electron-builder-linux
             target_os: linux
             target_cpu: x64
+            artifact: electron-linux-x64.zip
           - name: linux-arm64
-            os: ubuntu-22.04   # PLACEHOLDER — needs self-hosted / larger runner
+            runner: electron-builder-linux
             target_os: linux
             target_cpu: arm64
-          - name: mac-arm64
-            os: macos-14       # PLACEHOLDER — needs self-hosted / larger runner
+            artifact: electron-linux-arm64.zip
+          - name: darwin-arm64
+            runner: electron-builder-macos-arm64
             target_os: mac
             target_cpu: arm64
-          - name: mac-x64
-            os: macos-14       # PLACEHOLDER — macos-13 removed Dec 2025
+            artifact: electron-darwin-arm64.zip
+          - name: darwin-x64
+            runner: electron-builder-macos-x64
             target_os: mac
             target_cpu: x64
-          - name: win-x64
-            os: windows-2022   # PLACEHOLDER — needs self-hosted / larger runner
+            artifact: electron-darwin-x64.zip
+          - name: win32-x64
+            runner: electron-builder-windows
             target_os: win
             target_cpu: x64
+            artifact: electron-win32-x64.zip
 
-    runs-on: ${{ matrix.os }}
-
-    env:
-      ELECTRON_VERSION: ${{ github.event.inputs.electron_version || 'v40.4.1' }}
+    runs-on: ${{ matrix.runner }}
 
     steps:
       - name: Checkout patch repo
@@ -69,48 +103,29 @@ jobs:
         with:
           path: electron-extra-codecs
 
-      - name: Free disk space (linux)
-        if: runner.os == 'Linux'
-        run: |
-          sudo rm -rf /usr/share/dotnet || true
-          sudo rm -rf /usr/local/lib/android || true
-          sudo rm -rf /opt/ghc || true
-          sudo rm -rf /usr/local/share/boost || true
-          sudo apt-get clean || true
-          df -h
-
-      - name: Free disk space (macOS)
-        if: runner.os == 'macOS'
-        run: |
-          sudo rm -rf /Applications/Xcode_15*.app/Contents/Developer/Platforms/iPhoneOS.platform/DeviceSupport || true
-          sudo rm -rf /Users/runner/Library/Android || true
-          df -h
-
-      - name: Free disk space (windows)
-        if: runner.os == 'Windows'
-        shell: pwsh
-        run: |
-          Get-PSDrive -PSProvider FileSystem | Format-Table Name, @{n='Free(GB)';e={[math]::Round($_.Free/1GB,1)}}
+      - name: Report disk space
+        shell: bash
+        run: df -h . || true
 
       - name: Install Linux build deps
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y python3 python3-pip git curl lsb-release ca-certificates
+          sudo apt-get install -y build-essential python3 python3-pip git curl \
+            lsb-release ca-certificates pkg-config libgtk-3-dev libnotify-dev \
+            libnss3-dev libxss1 libgconf-2-4 libasound2-dev libcups2-dev \
+            libxtst-dev libatk1.0-dev libatk-bridge2.0-dev libdrm-dev \
+            libgbm-dev
 
       - name: Setup depot_tools
         shell: bash
         run: |
-          git clone https://chromium.googlesource.com/chromium/tools/depot_tools.git
+          if [[ ! -d depot_tools ]]; then
+            git clone https://chromium.googlesource.com/chromium/tools/depot_tools.git
+          else
+            cd depot_tools && git pull && cd ..
+          fi
           echo "$PWD/depot_tools" >> "$GITHUB_PATH"
-
-      - name: Cache source checkout (best effort)
-        uses: actions/cache@v4
-        with:
-          path: |
-            src
-            .gclient
-          key: electron-src-${{ runner.os }}-${{ matrix.target_cpu }}-${{ env.ELECTRON_VERSION }}
 
       - name: Sync Electron source
         shell: bash
@@ -124,16 +139,12 @@ jobs:
           cd ../..
           gclient sync -f
 
-      - name: Copy patch repo into src
-        shell: bash
-        run: |
-          rm -rf src/electron-extra-codecs
-          cp -R electron-extra-codecs src/electron-extra-codecs
-
       - name: Apply codec patches
         shell: bash
         working-directory: src
         run: |
+          rm -rf electron-extra-codecs
+          cp -R ../electron-extra-codecs electron-extra-codecs
           bash electron-extra-codecs/scripts/apply_all.sh
 
       - name: Build Electron
@@ -142,8 +153,8 @@ jobs:
         run: |
           export CHROMIUM_BUILDTOOLS_PATH="$PWD/buildtools"
           gn_args='import("//electron/build/args/release.gn")'
-          if [[ "${{ matrix.target_cpu }}" == "arm64" && "${{ matrix.target_os }}" == "linux" ]]; then
-            gn_args+=' target_cpu="arm64"'
+          if [[ "${{ matrix.target_cpu }}" != "x64" || "${{ matrix.target_os }}" == "linux" ]]; then
+            gn_args+=' target_cpu="${{ matrix.target_cpu }}"'
           fi
           gn gen out/Release --args="$gn_args"
           ninja -C out/Release electron
@@ -152,25 +163,61 @@ jobs:
           fi
           ninja -C out/Release electron:electron_dist_zip
 
-      - name: Upload dist artifact
+      - name: Rename dist artifact
+        shell: bash
+        run: cp src/out/Release/dist.zip "${{ matrix.artifact }}"
+
+      - name: Upload build artifact
         uses: actions/upload-artifact@v4
         with:
-          name: electron-${{ matrix.name }}-dist
-          path: src/out/Release/dist.zip
+          name: ${{ matrix.artifact }}
+          path: ${{ matrix.artifact }}
           if-no-files-found: error
 
+  # -----------------------------------------------------------------------
+  # Release: creates a GitHub Release with all platform zips
+  # -----------------------------------------------------------------------
   release:
+    name: Create release
     if: startsWith(github.ref, 'refs/tags/')
     needs: build
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v4
+
       - name: Download all artifacts
         uses: actions/download-artifact@v4
         with:
           path: artifacts
 
-      - name: Create release
+      - name: Collect release files
+        run: |
+          mkdir -p release
+          find artifacts -name '*.zip' -exec cp {} release/ \;
+          ls -lh release/
+
+      - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ github.ref_name }}
-          files: artifacts/**/dist.zip
+          name: "Electron Extra Codecs ${{ github.ref_name }}"
+          body: |
+            Custom Electron build based on **${{ env.ELECTRON_VERSION }}** with extra codec support:
+            - HEVC (H.265) software decode
+            - AC3 (Dolby Digital) software decode
+            - EAC3 (Dolby Digital Plus) software decode
+            - DTS software decode
+
+            ## Downloads
+
+            | Platform | File |
+            |----------|------|
+            | Linux x64 | `electron-linux-x64.zip` |
+            | Linux arm64 | `electron-linux-arm64.zip` |
+            | macOS arm64 | `electron-darwin-arm64.zip` |
+            | macOS x64 | `electron-darwin-x64.zip` |
+            | Windows x64 | `electron-win32-x64.zip` |
+
+            These are full Electron `dist.zip` archives. Extract and use as drop-in replacement for stock Electron.
+          files: release/*
+          fail_on_unmatched_files: true
