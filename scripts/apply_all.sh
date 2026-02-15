@@ -27,7 +27,7 @@ for tool in python3 bash grep; do
   fi
 done
 
-for script in patch_chromium_media.py patch_ffmpeg.sh; do
+for script in patch_chromium_media.py patch_ffmpeg.sh patch_ffmpeg_configs.py; do
   if [[ ! -f "$SCRIPT_DIR/$script" ]]; then
     echo "ERROR: Missing $script in $SCRIPT_DIR" >&2
     exit 1
