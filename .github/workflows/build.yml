@@ -112,12 +112,12 @@ jobs:
 
       - name: Setup depot_tools
         run: |
-          if [[ ! -d depot_tools ]]; then
-            git clone https://chromium.googlesource.com/chromium/tools/depot_tools.git
+          if [[ ! -d "$HOME/depot_tools" ]]; then
+            git clone https://chromium.googlesource.com/chromium/tools/depot_tools.git "$HOME/depot_tools"
           else
-            cd depot_tools && git pull && cd ..
+            git -C "$HOME/depot_tools" pull
           fi
-          echo "$PWD/depot_tools" >> "$GITHUB_PATH"
+          echo "$HOME/depot_tools" >> "$GITHUB_PATH"
 
       - name: Sync Electron source
         run: |

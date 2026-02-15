@@ -167,34 +167,6 @@ def patch_ffmpeg_common(text: str):
     return text, changed
 
 
-def patch_ffmpeg_audio_decoder(text: str):
-    changed = []
-    needed = [
-        "case AudioCodec::kAC3:",
-        "case AudioCodec::kEAC3:",
-        "case AudioCodec::kDTS:",
-        "case AudioCodec::kDTSXP2:",
-    ]
-
-    if not all(token in text for token in needed):
-        marker = "case AudioCodec::kAAC:"
-        if marker not in text:
-            raise RuntimeError("Could not find AAC case in ffmpeg_audio_decoder.cc")
-        insert = (
-            "case AudioCodec::kAC3:\n"
-            "    case AudioCodec::kEAC3:\n"
-            "    case AudioCodec::kDTS:\n"
-            "    case AudioCodec::kDTSXP2:\n"
-            "    "
-        )
-        text = text.replace(marker, insert + marker, 1)
-        changed.append(
-            "ffmpeg_audio_decoder.cc: inserted AC3/EAC3/DTS/DTSXP2 accept cases"
-        )
-
-    return text, changed
-
-
 def patch_ffmpeg_video_decoder(text: str):
     """Move HEVC from NOTREACHED group into the multithreaded decode path.
 
@@ -250,7 +222,6 @@ def main() -> int:
     targets = {
         Path("media/base/supported_types.cc"): patch_supported_types,
         Path("media/ffmpeg/ffmpeg_common.cc"): patch_ffmpeg_common,
-        Path("media/filters/ffmpeg_audio_decoder.cc"): patch_ffmpeg_audio_decoder,
         Path("media/filters/ffmpeg_video_decoder.cc"): patch_ffmpeg_video_decoder,
     }
 

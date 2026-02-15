@@ -34,23 +34,23 @@ for script in patch_chromium_media.py patch_ffmpeg.sh; do
   fi
 done
 
-echo "[1/4] Validating Chromium media patch patterns"
+echo "[1/3] Validating Chromium media patch patterns"
 python3 "$SCRIPT_DIR/patch_chromium_media.py" --check
 
 if $DRY_RUN; then
-  echo "[2/4] Validating FFmpeg build config patterns"
+  echo "[2/3] Validating FFmpeg build config patterns"
   bash "$SCRIPT_DIR/patch_ffmpeg.sh" --check third_party/ffmpeg
   echo "Dry run: all patterns validated successfully."
   exit 0
 fi
 
-echo "[2/4] Applying Chromium media patches"
+echo "[1/3] Applying Chromium media patches"
 python3 "$SCRIPT_DIR/patch_chromium_media.py"
 
-echo "[3/4] Patching FFmpeg build config and regenerating configs"
+echo "[2/3] Patching FFmpeg build config and regenerating configs"
 bash "$SCRIPT_DIR/patch_ffmpeg.sh" third_party/ffmpeg
 
-echo "[4/4] Verifying key patch indicators"
+echo "[3/3] Verifying key patch indicators"
 
 pass=true
 
