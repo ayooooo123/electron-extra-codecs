@@ -57,7 +57,7 @@ jobs:
           import ast; ast.parse(text[start:end])
           "
 
-  build:
+  build_linux:
     name: Build ${{ matrix.name }}
     needs: validate
     runs-on: ubuntu-latest
@@ -74,10 +74,6 @@ jobs:
             target_os: linux
             target_cpu: x64
             artifact: electron-linux-x64.zip
-          - name: win32-x64
-            target_os: win
-            target_cpu: x64
-            artifact: electron-win32-x64.zip
 
     steps:
       - name: Checkout patch repo
@@ -141,6 +137,12 @@ jobs:
           fi
           gclient sync --with_tags --revision "src/electron@$ELECTRON_VERSION" --reset --verbose --no-history
 
+      - name: Ensure packed refs file exists
+        working-directory: src/electron
+        run: |
+          git pack-refs --all || true
+          test -f .git/packed-refs || touch .git/packed-refs
+
       - name: Apply codec patches
         working-directory: src
         run: |
@@ -160,9 +162,6 @@ jobs:
         run: |
           export CHROMIUM_BUILDTOOLS_PATH="$PWD/buildtools"
           gn_args='import("//electron/build/args/release.gn") target_cpu="${{ matrix.target_cpu }}"'
-          if [[ "${{ matrix.target_os }}" == "win" ]]; then
-            gn_args+=' target_os="win"'
-          fi
           gn gen out/Release --args="$gn_args"
           ninja -C out/Release electron
           python3 electron/script/strip-binaries.py -d out/Release || true
@@ -182,10 +181,84 @@ jobs:
         if: always()
         run: rm -rf src/out/Release
 
+  build_windows:
+    name: Build win32-x64
+    needs: validate
+    runs-on: windows-latest
+    steps:
+      - name: Checkout patch repo
+        uses: actions/checkout@v4
+        with:
+          path: electron-extra-codecs
+
+      - name: Setup depot_tools
+        shell: pwsh
+        run: |
+          $depotTools = "$env:USERPROFILE\depot_tools"
+          if (!(Test-Path $depotTools)) {
+            git clone https://chromium.googlesource.com/chromium/tools/depot_tools.git $depotTools
+          } else {
+            git -C $depotTools fetch origin
+            try { git -C $depotTools checkout -f main } catch { git -C $depotTools checkout -f master }
+            try { git -C $depotTools reset --hard origin/main } catch { git -C $depotTools reset --hard origin/master }
+          }
+          Add-Content -Path $env:GITHUB_PATH -Value $depotTools
+
+      - name: Sync Electron source
+        shell: pwsh
+        timeout-minutes: 180
+        run: |
+          if (!(Test-Path .gclient)) {
+            gclient config --name "src/electron" --unmanaged https://github.com/electron/electron
+          }
+          gclient sync --with_tags --revision "src/electron@$env:ELECTRON_VERSION" --reset --verbose --no-history
+
+      - name: Ensure packed refs file exists
+        shell: pwsh
+        working-directory: src/electron
+        run: |
+          git pack-refs --all
+          if (!(Test-Path .git/packed-refs)) { New-Item -Path .git/packed-refs -ItemType File | Out-Null }
+
+      - name: Apply codec patches
+        shell: bash
+        working-directory: src
+        run: |
+          rm -rf electron-extra-codecs
+          cp -R ../electron-extra-codecs electron-extra-codecs
+          bash electron-extra-codecs/scripts/apply_all.sh
+
+      - name: Build Electron
+        shell: pwsh
+        working-directory: src
+        run: |
+          $env:CHROMIUM_BUILDTOOLS_PATH = "$PWD/buildtools"
+          $gnArgs = 'import("//electron/build/args/release.gn") target_cpu="x64" target_os="win"'
+          gn gen out/Release --args="$gnArgs"
+          ninja -C out/Release electron
+          python3 electron/script/strip-binaries.py -d out/Release
+          ninja -C out/Release electron:electron_dist_zip
+
+      - name: Rename dist artifact
+        shell: pwsh
+        run: Copy-Item src/out/Release/dist.zip electron-win32-x64.zip
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: electron-win32-x64.zip
+          path: electron-win32-x64.zip
+          if-no-files-found: error
+
+      - name: Clean build output
+        if: always()
+        shell: pwsh
+        run: Remove-Item -Recurse -Force src/out/Release -ErrorAction SilentlyContinue
+
   release:
     name: Create release
     if: startsWith(github.ref, 'refs/tags/')
-    needs: build
+    needs: [build_linux, build_windows]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
