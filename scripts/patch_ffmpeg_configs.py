@@ -309,12 +309,10 @@ def patch_ffmpeg_generated_gni(text: str) -> tuple[str, int, list[str]]:
         else:
             warnings.append(f"WARN: Missing ffmpeg source file: {source_path}")
 
-    chrome_sources = set()
-    for block_start, block_end in find_chrome_branding_blocks(text):
-        chrome_sources.update(extract_c_sources(text[block_start:block_end]))
+    all_existing_sources = extract_c_sources(text)
 
     sources_to_add = [
-        source for source in available_sources if source not in chrome_sources
+        source for source in available_sources if source not in all_existing_sources
     ]
     if not sources_to_add:
         return text, 0, warnings
