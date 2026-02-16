@@ -310,10 +310,22 @@ def patch_ffmpeg_generated_gni(text: str) -> tuple[str, int, list[str]]:
             warnings.append(f"WARN: Missing ffmpeg source file: {source_path}")
 
     all_existing_sources = extract_c_sources(text)
+    existing_basenames = {Path(source).name for source in all_existing_sources}
 
-    sources_to_add = [
-        source for source in available_sources if source not in all_existing_sources
-    ]
+    sources_to_add = []
+    added_basenames = set()
+    for source in available_sources:
+        if source in all_existing_sources:
+            continue
+        base_name = Path(source).name
+        if base_name in existing_basenames or base_name in added_basenames:
+            warnings.append(
+                f"WARN: Skipping {source} due to duplicate object basename: {base_name}"
+            )
+            continue
+        sources_to_add.append(source)
+        added_basenames.add(base_name)
+
     if not sources_to_add:
         return text, 0, warnings
 
