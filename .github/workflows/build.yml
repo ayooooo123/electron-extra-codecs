@@ -185,6 +185,8 @@ jobs:
     name: Build win32-x64
     needs: validate
     runs-on: windows-latest
+    env:
+      DEPOT_TOOLS_WIN_TOOLCHAIN: "0"
     steps:
       - name: Checkout patch repo
         uses: actions/checkout@v4
