@@ -1,6 +1,7 @@
 # =============================================================================
-# Builds linux-x64, linux-arm64, win32-x64 on a single self-hosted ARM Linux
-# box (sequential — one build at a time to avoid thrashing shared resources).
+# Builds linux-arm64 on a self-hosted ARM Linux runner.
+# x64 and win32 builds require an x64-capable runner/emulation layer and are
+# intentionally excluded from this workflow.
 #
 # macOS builds run on Cirrus CI (see .cirrus.yml) and upload to the same
 # GitHub Release via the gh CLI.
@@ -72,14 +73,6 @@ jobs:
             target_os: linux
             target_cpu: arm64
             artifact: electron-linux-arm64.zip
-          - name: linux-x64
-            target_os: linux
-            target_cpu: x64
-            artifact: electron-linux-x64.zip
-          - name: win32-x64
-            target_os: win
-            target_cpu: x64
-            artifact: electron-win32-x64.zip
 
     steps:
       - name: Checkout patch repo
@@ -215,16 +208,14 @@ jobs:
             - EAC3 (Dolby Digital Plus) software decode
             - DTS software decode
 
-            ## Downloads (Linux + Windows)
+            ## Downloads
 
             Built on self-hosted ARM64 Linux runner.
             macOS builds are added separately via Cirrus CI (see `.cirrus.yml`).
 
             | Platform | File |
             |----------|------|
-            | Linux x64 | `electron-linux-x64.zip` |
             | Linux arm64 | `electron-linux-arm64.zip` |
-            | Windows x64 | `electron-win32-x64.zip` |
 
             These are full Electron `dist.zip` archives.
           files: release/*
