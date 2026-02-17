@@ -22,7 +22,6 @@ CONFIG_FLAGS = [
     "CONFIG_AC3_FIXED_DECODER",
     "CONFIG_DTSHD_DEMUXER",
     "CONFIG_DTS_DEMUXER",
-    "CONFIG_HEVC_DEMUXER",
     "CONFIG_AC3_PARSER",
     "CONFIG_HEVC_PARSER",
     "CONFIG_DCA_PARSER",
@@ -45,7 +44,6 @@ PARSER_LIST_ENTRIES = [
 DEMUXER_LIST_ENTRIES = [
     "&ff_dtshd_demuxer",
     "&ff_dts_demuxer",
-    "&ff_hevc_demuxer",
 ]
 
 EXTRA_GNI_SOURCES = [
@@ -68,6 +66,14 @@ EXTRA_GNI_SOURCES = [
     "libavcodec/ac3tab.c",
     "libavcodec/ac3_parser.c",
     "libavcodec/ac3dec_fixed.c",
+    "libavcodec/x86/ac3dsp_init.c",
+    "libavcodec/x86/bswapdsp_init.c",
+    "libavcodec/x86/dcadsp_init.c",
+    "libavcodec/x86/fmtconvert_init.c",
+    "libavcodec/x86/synth_filter_init.c",
+    "libavcodec/aarch64/ac3dsp_init_aarch64.c",
+    "libavcodec/aarch64/fmtconvert_init.c",
+    "libavcodec/aarch64/synth_filter_init.c",
     "libavcodec/eac3dec.c",
     "libavcodec/eac3_data.c",
     "libavcodec/dca.c",
@@ -86,7 +92,6 @@ EXTRA_GNI_SOURCES = [
     "libavcodec/synth_filter.c",
     "libavformat/dtshddec.c",
     "libavformat/dtsdec.c",
-    "libavformat/hevcdec.c",
 ]
 
 CHROME_CONFIG_ROOT = Path("third_party/ffmpeg/chromium/config/Chrome")
