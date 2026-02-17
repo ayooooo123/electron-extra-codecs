@@ -46,53 +46,101 @@ DEMUXER_LIST_ENTRIES = [
     "&ff_dts_demuxer",
 ]
 
-EXTRA_GNI_SOURCES = [
-    "libavcodec/hevcdec.c",
-    "libavcodec/hevc_cabac.c",
-    "libavcodec/hevc_filter.c",
-    "libavcodec/hevc_mvs.c",
-    "libavcodec/hevc_parse.c",
-    "libavcodec/hevc_parser.c",
-    "libavcodec/hevc_ps.c",
-    "libavcodec/hevc_refs.c",
-    "libavcodec/hevc_sei.c",
-    "libavcodec/hevc_data.c",
-    "libavcodec/h274.c",
+# ---------------------------------------------------------------------------
+# Source file lists, split by platform.
+#
+# Modern Chromium FFmpeg (Chromium 130+) reorganised HEVC sources into
+# libavcodec/hevc/ sub-directory.  ASM (NASM) and GAS (.S) files must go
+# into separate GNI variables (ffmpeg_asm_sources / ffmpeg_gas_sources).
+# ---------------------------------------------------------------------------
+
+# Platform-independent C sources (ffmpeg_c_sources, all arches)
+EXTRA_C_SOURCES = [
+    # -- HEVC decoder core (hevc/ subdirectory) --
+    "libavcodec/hevc/hevcdec.c",
+    "libavcodec/hevc/cabac.c",
+    "libavcodec/hevc/data.c",
+    "libavcodec/hevc/dsp.c",
+    "libavcodec/hevc/filter.c",
+    "libavcodec/hevc/mvs.c",
+    "libavcodec/hevc/parse.c",
+    "libavcodec/hevc/parser.c",
+    "libavcodec/hevc/pred.c",
+    "libavcodec/hevc/ps.c",
+    "libavcodec/hevc/refs.c",
+    "libavcodec/hevc/sei.c",
+    # -- HEVC dependencies --
     "libavcodec/aom_film_grain.c",
+    "libavcodec/dovi_rpu.c",
+    "libavcodec/dovi_rpudec.c",
+    "libavcodec/dynamic_hdr_vivid.c",
+    "libavcodec/h274.c",
+    # -- AC3 / EAC3 --
+    "libavcodec/ac3.c",
+    "libavcodec/ac3_parser.c",
+    "libavcodec/ac3dec_data.c",
+    "libavcodec/ac3dec_fixed.c",
     "libavcodec/ac3dec_float.c",
     "libavcodec/ac3dsp.c",
-    "libavcodec/ac3dec_data.c",
-    "libavcodec/ac3.c",
     "libavcodec/ac3tab.c",
-    "libavcodec/ac3_parser.c",
-    "libavcodec/ac3dec_fixed.c",
-    "libavcodec/x86/ac3dsp_init.c",
-    "libavcodec/x86/bswapdsp_init.c",
-    "libavcodec/x86/dcadsp_init.c",
-    "libavcodec/x86/fmtconvert_init.c",
-    "libavcodec/x86/synth_filter_init.c",
-    "libavcodec/aarch64/ac3dsp_init_aarch64.c",
-    "libavcodec/aarch64/fmtconvert_init.c",
-    "libavcodec/aarch64/synth_filter_init.c",
-    "libavcodec/eac3dec.c",
     "libavcodec/eac3_data.c",
+    "libavcodec/eac3dec.c",
+    # -- DCA / DTS --
     "libavcodec/dca.c",
     "libavcodec/dca_core.c",
     "libavcodec/dca_exss.c",
     "libavcodec/dca_lbr.c",
     "libavcodec/dca_parser.c",
+    "libavcodec/dca_sample_rate_tab.c",
     "libavcodec/dca_xll.c",
     "libavcodec/dcadata.c",
-    "libavcodec/dcadec.c",
     "libavcodec/dcadct.c",
+    "libavcodec/dcadec.c",
     "libavcodec/dcadsp.c",
     "libavcodec/dcahuff.c",
+    # -- Shared DSP helpers --
     "libavcodec/bswapdsp.c",
     "libavcodec/fmtconvert.c",
     "libavcodec/synth_filter.c",
-    "libavformat/dtshddec.c",
+    # -- Demuxers --
     "libavformat/dtsdec.c",
+    "libavformat/dtshddec.c",
 ]
+
+# x86 C init files (ffmpeg_c_sources, x86/x64 only)
+EXTRA_X86_C_SOURCES = [
+    "libavcodec/x86/ac3dsp_init.c",
+    "libavcodec/x86/bswapdsp_init.c",
+    "libavcodec/x86/dcadsp_init.c",
+    "libavcodec/x86/fmtconvert_init.c",
+    "libavcodec/x86/synth_filter_init.c",
+]
+
+# x86 NASM assembly (ffmpeg_asm_sources, x86/x64 only)
+EXTRA_X86_ASM_SOURCES = [
+    "libavcodec/x86/ac3dsp.asm",
+    "libavcodec/x86/ac3dsp_downmix.asm",
+    "libavcodec/x86/bswapdsp.asm",
+    "libavcodec/x86/dcadsp.asm",
+    "libavcodec/x86/fmtconvert.asm",
+    "libavcodec/x86/synth_filter.asm",
+]
+
+# aarch64 C init files (ffmpeg_c_sources, arm64 only)
+EXTRA_AARCH64_C_SOURCES = [
+    "libavcodec/aarch64/ac3dsp_init_aarch64.c",
+    "libavcodec/aarch64/fmtconvert_init.c",
+    "libavcodec/aarch64/synth_filter_init.c",
+]
+
+# aarch64 GAS assembly (ffmpeg_gas_sources, arm64 only)
+EXTRA_AARCH64_GAS_SOURCES = [
+    "libavcodec/aarch64/ac3dsp_neon.S",
+    "libavcodec/aarch64/fmtconvert_neon.S",
+    "libavcodec/aarch64/synth_filter_neon.S",
+]
+
+# ---------------------------------------------------------------------------
 
 CHROME_CONFIG_ROOT = Path("third_party/ffmpeg/chromium/config/Chrome")
 FFMPEG_ROOT = Path("third_party/ffmpeg")
@@ -100,7 +148,6 @@ FFMPEG_GENERATED_GNI = FFMPEG_ROOT / "ffmpeg_generated.gni"
 GNI_MARKER = "# Extra codec sources for custom Chrome builds (HEVC, AC3, EAC3, DTS)"
 
 IF_BLOCK_RE = re.compile(r"if\s*\((?P<condition>.*?)\)\s*\{", re.DOTALL)
-LIST_ENTRY_RE = re.compile(r'^\s*"(?P<path>[^"\n]+\.c)",\s*$', re.MULTILINE)
 
 
 def read_text(path: Path) -> str:
@@ -115,6 +162,9 @@ def detect_newline(text: str) -> str:
     return "\r\n" if "\r\n" in text else "\n"
 
 
+# ---- config_components.h patching ----------------------------------------
+
+
 def patch_config_components(text: str) -> tuple[str, int]:
     patched = text
     enabled_count = 0
@@ -126,6 +176,9 @@ def patch_config_components(text: str) -> tuple[str, int]:
         patched, replacements = pattern.subn(r"\g<1>1\g<2>", patched)
         enabled_count += replacements
     return patched, enabled_count
+
+
+# ---- codec / parser / demuxer list patching ------------------------------
 
 
 def patch_list_file(text: str, entries: list[str]) -> tuple[str, int]:
@@ -158,6 +211,9 @@ def patch_list_file(text: str, entries: list[str]) -> tuple[str, int]:
     return "".join(lines), len(missing_entries)
 
 
+# ---- ffmpeg_generated.gni patching ---------------------------------------
+
+
 def find_block_end(text: str, opening_brace_index: int) -> int | None:
     depth = 0
     for index in range(opening_brace_index, len(text)):
@@ -171,132 +227,175 @@ def find_block_end(text: str, opening_brace_index: int) -> int | None:
     return None
 
 
-def find_chrome_branding_blocks(text: str) -> list[tuple[int, int]]:
-    blocks = []
-    for match in IF_BLOCK_RE.finditer(text):
-        condition = match.group("condition")
-        if "ffmpeg_branding" not in condition:
-            continue
-        if '"Chrome"' not in condition and '"ChromeOS"' not in condition:
-            continue
-
-        opening_brace_index = text.find("{", match.start(), match.end())
-        if opening_brace_index == -1:
-            continue
-        block_end = find_block_end(text, opening_brace_index)
-        if block_end is None:
-            continue
-        blocks.append((match.start(), block_end))
-    return blocks
+def filter_available(sources: list[str], warnings: list[str]) -> list[str]:
+    """Return sources whose files exist on disk."""
+    available = []
+    for source in sources:
+        source_path = FFMPEG_ROOT / source
+        if source_path.is_file():
+            available.append(source)
+        else:
+            warnings.append(f"WARN: Missing ffmpeg source file: {source_path}")
+    return available
 
 
-def extract_c_sources(text: str) -> set[str]:
-    return {match.group("path") for match in LIST_ENTRY_RE.finditer(text)}
+def filter_not_in_gni(sources: list[str], gni_text: str) -> list[str]:
+    """Return sources not already present (exact path match) in the GNI."""
+    return [s for s in sources if f'"{s}"' not in gni_text]
 
 
-def insert_into_managed_gni_block(text: str, sources: list[str]) -> str | None:
-    lines = text.splitlines(keepends=True)
-    marker_index = None
-    for index, line in enumerate(lines):
-        if GNI_MARKER in line:
-            marker_index = index
-            break
+def _format_source_list(
+    indent: str,
+    var_name: str,
+    sources: list[str],
+    newline: str,
+) -> list[str]:
+    """Build lines for a GNI ``var += [ ... ]`` block."""
+    lines = [f"{indent}{var_name} += ["]
+    for source in sources:
+        lines.append(f'{indent}  "{source}",')
+    lines.append(f"{indent}]")
+    return lines
 
-    if marker_index is None:
-        return None
 
-    list_start = None
-    for index in range(marker_index, len(lines)):
-        stripped = lines[index].rstrip("\r\n")
-        if re.match(r"^\s*ffmpeg_c_sources\s*\+=\s*\[\s*$", stripped):
-            list_start = index
-            break
+def build_managed_gni_block(
+    c_sources: list[str],
+    x86_c_sources: list[str],
+    x86_asm_sources: list[str],
+    aarch64_c_sources: list[str],
+    aarch64_gas_sources: list[str],
+    newline: str,
+) -> str:
+    """Build the complete managed GNI block with platform guards."""
+    lines: list[str] = [GNI_MARKER]
+    lines.append('if (ffmpeg_branding == "Chrome" || ffmpeg_branding == "ChromeOS") {')
 
-    if list_start is None:
-        return None
+    # platform-independent C sources
+    if c_sources:
+        lines.extend(_format_source_list("  ", "ffmpeg_c_sources", c_sources, newline))
 
-    list_end = None
-    for index in range(list_start + 1, len(lines)):
-        stripped = lines[index].rstrip("\r\n")
-        if re.match(r"^\s*\]\s*$", stripped):
-            list_end = index
-            break
+    # x86 / x64 block
+    has_x86 = x86_c_sources or x86_asm_sources
+    if has_x86:
+        lines.append("")
+        lines.append('  if (current_cpu == "x64" ||')
+        lines.append('      (is_win && current_cpu == "x86") ||')
+        lines.append('      (use_linux_config && current_cpu == "x86")) {')
+        if x86_c_sources:
+            lines.extend(
+                _format_source_list("    ", "ffmpeg_c_sources", x86_c_sources, newline)
+            )
+        if x86_asm_sources:
+            lines.extend(
+                _format_source_list(
+                    "    ", "ffmpeg_asm_sources", x86_asm_sources, newline
+                )
+            )
+        lines.append("  }")
 
-    if list_end is None:
-        return None
+    # aarch64 block
+    has_aarch64 = aarch64_c_sources or aarch64_gas_sources
+    if has_aarch64:
+        lines.append("")
+        lines.append('  if (current_cpu == "arm64" || current_cpu == "arm64e") {')
+        if aarch64_c_sources:
+            lines.extend(
+                _format_source_list(
+                    "    ", "ffmpeg_c_sources", aarch64_c_sources, newline
+                )
+            )
+        if aarch64_gas_sources:
+            lines.extend(
+                _format_source_list(
+                    "    ", "ffmpeg_gas_sources", aarch64_gas_sources, newline
+                )
+            )
+        lines.append("  }")
 
-    entry_indent = None
-    for index in range(list_start + 1, list_end):
-        stripped = lines[index].rstrip("\r\n")
-        match = re.match(r'^(\s*)"[^"\n]+",\s*$', stripped)
-        if match:
-            entry_indent = match.group(1)
-            break
+    lines.append("}")
+    return newline.join(lines) + newline
 
-    if entry_indent is None:
-        close_indent_match = re.match(r"^(\s*)\]", lines[list_end])
-        close_indent = close_indent_match.group(1) if close_indent_match else "  "
-        entry_indent = f"{close_indent}  "
+
+def remove_managed_block(text: str) -> str:
+    """Remove the existing managed GNI block (marker + following if-block)."""
+    marker_pos = text.find(GNI_MARKER)
+    if marker_pos == -1:
+        return text
 
     newline = detect_newline(text)
-    insert_lines = [f'{entry_indent}"{source}",{newline}' for source in sources]
-    lines[list_end:list_end] = insert_lines
-    return "".join(lines)
 
+    # Find start of the marker line
+    line_start = text.rfind(newline, 0, marker_pos)
+    line_start = 0 if line_start == -1 else line_start + len(newline)
 
-def append_managed_gni_block(text: str, sources: list[str]) -> str:
-    newline = detect_newline(text)
-    block_lines = [
-        GNI_MARKER,
-        'if (ffmpeg_branding == "Chrome" || ffmpeg_branding == "ChromeOS") {',
-        "  ffmpeg_c_sources += [",
-    ]
-    block_lines.extend([f'    "{source}",' for source in sources])
-    block_lines.extend(["  ]", "}"])
-    block_text = newline.join(block_lines) + newline
+    # Find the opening brace of the if-block after the marker
+    brace_pos = text.find("{", marker_pos)
+    if brace_pos == -1:
+        return text
 
-    if text.endswith(newline * 2):
-        return text + block_text
-    if text.endswith(newline):
-        return text + newline + block_text
-    return text + newline + newline + block_text
+    block_end = find_block_end(text, brace_pos)
+    if block_end is None:
+        return text
+
+    before = text[:line_start].rstrip(newline)
+    after = text[block_end:].lstrip(newline)
+
+    if after:
+        return before + newline + after
+    return before + newline
 
 
 def patch_ffmpeg_generated_gni(text: str) -> tuple[str, int, list[str]]:
-    warnings = []
-    available_sources = []
-    for source in EXTRA_GNI_SOURCES:
-        source_path = FFMPEG_ROOT / source
-        if source_path.is_file():
-            available_sources.append(source)
-        else:
-            warnings.append(f"WARN: Missing ffmpeg source file: {source_path}")
+    warnings: list[str] = []
 
-    all_existing_sources = extract_c_sources(text)
-    existing_basenames = {Path(source).name for source in all_existing_sources}
+    # Filter to files that actually exist on disk
+    c_sources = filter_available(EXTRA_C_SOURCES, warnings)
+    x86_c_sources = filter_available(EXTRA_X86_C_SOURCES, warnings)
+    x86_asm_sources = filter_available(EXTRA_X86_ASM_SOURCES, warnings)
+    aarch64_c_sources = filter_available(EXTRA_AARCH64_C_SOURCES, warnings)
+    aarch64_gas_sources = filter_available(EXTRA_AARCH64_GAS_SOURCES, warnings)
 
-    sources_to_add = []
-    added_basenames = set()
-    for source in available_sources:
-        if source in all_existing_sources:
-            continue
-        base_name = Path(source).name
-        if base_name in existing_basenames or base_name in added_basenames:
-            warnings.append(
-                f"WARN: Skipping {source} due to duplicate object basename: {base_name}"
-            )
-            continue
-        sources_to_add.append(source)
-        added_basenames.add(base_name)
+    # Remove any previous managed block so we don't double-add
+    cleaned_text = remove_managed_block(text)
 
-    if not sources_to_add:
+    # Filter out sources already present elsewhere in the GNI
+    c_sources = filter_not_in_gni(c_sources, cleaned_text)
+    x86_c_sources = filter_not_in_gni(x86_c_sources, cleaned_text)
+    x86_asm_sources = filter_not_in_gni(x86_asm_sources, cleaned_text)
+    aarch64_c_sources = filter_not_in_gni(aarch64_c_sources, cleaned_text)
+    aarch64_gas_sources = filter_not_in_gni(aarch64_gas_sources, cleaned_text)
+
+    total_added = (
+        len(c_sources)
+        + len(x86_c_sources)
+        + len(x86_asm_sources)
+        + len(aarch64_c_sources)
+        + len(aarch64_gas_sources)
+    )
+    if total_added == 0:
         return text, 0, warnings
 
-    updated_text = insert_into_managed_gni_block(text, sources_to_add)
-    if updated_text is None:
-        updated_text = append_managed_gni_block(text, sources_to_add)
+    newline = detect_newline(cleaned_text)
+    block = build_managed_gni_block(
+        c_sources,
+        x86_c_sources,
+        x86_asm_sources,
+        aarch64_c_sources,
+        aarch64_gas_sources,
+        newline,
+    )
 
-    return updated_text, len(sources_to_add), warnings
+    if cleaned_text.endswith(newline * 2):
+        result = cleaned_text + block
+    elif cleaned_text.endswith(newline):
+        result = cleaned_text + newline + block
+    else:
+        result = cleaned_text + newline + newline + block
+
+    return result, total_added, warnings
+
+
+# ---- Orchestration -------------------------------------------------------
 
 
 def apply_patch(path: Path, patcher, check: bool) -> tuple[int, bool]:
@@ -405,18 +504,17 @@ def main() -> int:
         else:
             warnings.append(f"WARN: Missing file for {platform}: {demuxer_list}")
 
-    gni_added, gni_changed = 0, False
-    gni_warnings = []
+    # Patch ffmpeg_generated.gni
     gni_text = read_text(FFMPEG_GENERATED_GNI)
     gni_updated, gni_added, gni_warnings = patch_ffmpeg_generated_gni(gni_text)
-    if gni_updated != gni_text:
-        gni_changed = True
-        if not args.check:
-            write_text(FFMPEG_GENERATED_GNI, gni_updated)
+    gni_changed = gni_updated != gni_text
+    if gni_changed and not args.check:
+        write_text(FFMPEG_GENERATED_GNI, gni_updated)
     files_changed += int(gni_changed)
     warnings.extend(gni_warnings)
     print(
-        f"Patching ffmpeg_generated.gni: added {gni_added} source files for Chrome branding"
+        f"Patching ffmpeg_generated.gni: added {gni_added} source entries "
+        f"(C + ASM + GAS)"
     )
 
     for warning in warnings:
