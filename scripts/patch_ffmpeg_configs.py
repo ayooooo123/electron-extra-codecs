@@ -62,7 +62,6 @@ EXTRA_GNI_SOURCES = [
     "libavcodec/h274.c",
     "libavcodec/aom_film_grain.c",
     "libavcodec/ac3dec_float.c",
-    "libavcodec/ac3dec.c",
     "libavcodec/ac3dsp.c",
     "libavcodec/ac3dec_data.c",
     "libavcodec/ac3.c",

@@ -235,10 +235,15 @@ jobs:
         working-directory: src
         run: |
           $env:CHROMIUM_BUILDTOOLS_PATH = "$PWD/buildtools"
-          $gnArgs = 'import("//electron/build/args/release.gn") target_cpu="x64" target_os="win"'
-          gn gen out/Release --args="$gnArgs"
+          New-Item -ItemType Directory -Force out/Release | Out-Null
+          @'
+          import("//electron/build/args/release.gn")
+          target_cpu = "x64"
+          target_os = "win"
+          '@ | Set-Content out/Release/args.gn
+          gn gen out/Release
           ninja -C out/Release electron
-          python3 electron/script/strip-binaries.py -d out/Release
+          python3 electron/script/strip-binaries.py -d out/Release || true
           ninja -C out/Release electron:electron_dist_zip
 
       - name: Rename dist artifact
