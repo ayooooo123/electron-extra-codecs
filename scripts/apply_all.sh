@@ -64,6 +64,11 @@ if ! grep -q "AV_CODEC_ID_AC3" media/ffmpeg/ffmpeg_common.cc; then
   pass=false
 fi
 
+if ! grep -q 'push_back("hevc")' media/filters/ffmpeg_glue.cc; then
+  echo "FAIL: HEVC not found in ffmpeg_glue.cc allowlist"
+  pass=false
+fi
+
 if ! grep -q "AV_CODEC_ID_DTS" media/ffmpeg/ffmpeg_common.cc; then
   echo "FAIL: DTS mapping not found in ffmpeg_common.cc"
   pass=false

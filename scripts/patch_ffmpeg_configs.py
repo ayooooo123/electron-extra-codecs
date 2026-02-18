@@ -16,12 +16,19 @@ TARGETS = [
 
 CONFIG_FLAGS = [
     "CONFIG_HEVC_DECODER",
+    "CONFIG_HEVC_SEI",
     "CONFIG_AC3_DECODER",
     "CONFIG_EAC3_DECODER",
     "CONFIG_DCA_DECODER",
     "CONFIG_AC3_FIXED_DECODER",
+    "CONFIG_AC3DSP",
+    "CONFIG_BSWAPDSP",
+    "CONFIG_DOVI_RPU",
     "CONFIG_DTSHD_DEMUXER",
     "CONFIG_DTS_DEMUXER",
+    "CONFIG_AC3_DEMUXER",
+    "CONFIG_EAC3_DEMUXER",
+    "CONFIG_EAC3_CORE_BSF",
     "CONFIG_AC3_PARSER",
     "CONFIG_HEVC_PARSER",
     "CONFIG_DCA_PARSER",
@@ -114,6 +121,8 @@ EXTRA_X86_C_SOURCES = [
     "libavcodec/x86/dcadsp_init.c",
     "libavcodec/x86/fmtconvert_init.c",
     "libavcodec/x86/synth_filter_init.c",
+    "libavcodec/x86/hevc/dsp_init.c",
+    "libavcodec/x86/h26x/h2656dsp.c",
 ]
 
 # x86 NASM assembly (ffmpeg_asm_sources, x86/x64 only)
@@ -124,6 +133,13 @@ EXTRA_X86_ASM_SOURCES = [
     "libavcodec/x86/dcadsp.asm",
     "libavcodec/x86/fmtconvert.asm",
     "libavcodec/x86/synth_filter.asm",
+    "libavcodec/x86/hevc/add_res.asm",
+    "libavcodec/x86/hevc/deblock.asm",
+    "libavcodec/x86/hevc/idct.asm",
+    "libavcodec/x86/hevc/mc.asm",
+    "libavcodec/x86/hevc/sao.asm",
+    "libavcodec/x86/hevc/sao_10bit.asm",
+    "libavcodec/x86/h26x/h2656_inter.asm",
 ]
 
 # aarch64 C init files (ffmpeg_c_sources, arm64 only)
@@ -131,6 +147,7 @@ EXTRA_AARCH64_C_SOURCES = [
     "libavcodec/aarch64/ac3dsp_init_aarch64.c",
     "libavcodec/aarch64/fmtconvert_init.c",
     "libavcodec/aarch64/synth_filter_init.c",
+    "libavcodec/aarch64/hevcdsp_init_aarch64.c",
 ]
 
 # aarch64 GAS assembly (ffmpeg_gas_sources, arm64 only)
@@ -138,6 +155,11 @@ EXTRA_AARCH64_GAS_SOURCES = [
     "libavcodec/aarch64/ac3dsp_neon.S",
     "libavcodec/aarch64/fmtconvert_neon.S",
     "libavcodec/aarch64/synth_filter_neon.S",
+    "libavcodec/aarch64/hevcdsp_deblock_neon.S",
+    "libavcodec/aarch64/hevcdsp_idct_neon.S",
+    "libavcodec/aarch64/h26x/epel_neon.S",
+    "libavcodec/aarch64/h26x/qpel_neon.S",
+    "libavcodec/aarch64/h26x/sao_neon.S",
 ]
 
 # ---------------------------------------------------------------------------
@@ -487,6 +509,45 @@ def patch_ffmpeg_generated_gni(
     return result, total_added, warnings
 
 
+def patch_ffmpeg_build_gn(check: bool = False) -> list[str]:
+    build_gn = FFMPEG_ROOT / "BUILD.gn"
+    if not build_gn.is_file():
+        return ["WARN: third_party/ffmpeg/BUILD.gn not found"]
+
+    text = read_text(build_gn)
+
+    include_block_start = re.search(r"include_dirs\s*(?:\+?=)\s*\[", text)
+    if not include_block_start:
+        return ["WARN: Could not find include_dirs block in BUILD.gn"]
+
+    block_open = text.find("[", include_block_start.start())
+    if block_open == -1:
+        return ["WARN: Could not parse include_dirs block in BUILD.gn"]
+
+    block_close = text.find("]", block_open)
+    if block_close == -1:
+        return ["WARN: Could not parse include_dirs block in BUILD.gn"]
+
+    block = text[block_open : block_close + 1]
+    if re.search(r'"libavcodec"', block):
+        return []
+
+    dot_match = re.search(r'^(?P<indent>\s*)"\."\s*,\s*\n', block, re.MULTILINE)
+    if not dot_match:
+        return ["WARN: Could not find include_dirs with '.' entry in BUILD.gn"]
+
+    insert_at = block_open + dot_match.end()
+    indent = dot_match.group("indent")
+    new_text = text[:insert_at] + f'{indent}"libavcodec",\n' + text[insert_at:]
+
+    if not check:
+        write_text(build_gn, new_text)
+
+    return [
+        "BUILD.gn: added 'libavcodec' to include_dirs for HEVC subdirectory support"
+    ]
+
+
 # ---- Orchestration -------------------------------------------------------
 
 
@@ -611,6 +672,9 @@ def main() -> int:
         f"Patching ffmpeg_generated.gni: added {gni_added} source entries "
         f"(C + ASM + GAS)"
     )
+
+    for message in patch_ffmpeg_build_gn(args.check):
+        print(message)
 
     for warning in warnings:
         print(warning)

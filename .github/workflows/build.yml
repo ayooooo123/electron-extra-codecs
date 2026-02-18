@@ -38,7 +38,9 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Check Python syntax
-        run: python3 -c "import ast; ast.parse(open('scripts/patch_chromium_media.py').read())"
+        run: |
+          python3 -c "import ast; ast.parse(open('scripts/patch_chromium_media.py').read())"
+          python3 -c "import ast; ast.parse(open('scripts/patch_ffmpeg_configs.py').read())"
 
       - name: Check Bash syntax
         run: |
@@ -161,7 +163,7 @@ jobs:
         working-directory: src
         run: |
           export CHROMIUM_BUILDTOOLS_PATH="$PWD/buildtools"
-          gn_args='import("//electron/build/args/release.gn") target_cpu="${{ matrix.target_cpu }}"'
+          gn_args='import("//electron/build/args/release.gn") target_cpu="${{ matrix.target_cpu }}" enable_platform_hevc=true enable_hevc_parser_and_hw_decoder=true enable_platform_ac3_eac3_audio=true enable_platform_dts_audio=true'
           gn gen out/Release --args="$gn_args"
           ninja -C out/Release electron
           python3 electron/script/strip-binaries.py -d out/Release || true
@@ -240,6 +242,10 @@ jobs:
           import("//electron/build/args/release.gn")
           target_cpu = "x64"
           target_os = "win"
+          enable_platform_hevc = true
+          enable_hevc_parser_and_hw_decoder = true
+          enable_platform_ac3_eac3_audio = true
+          enable_platform_dts_audio = true
           '@ | Set-Content out/Release/args.gn
           gn gen out/Release
           ninja -C out/Release electron

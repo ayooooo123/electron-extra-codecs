@@ -206,6 +206,49 @@ def patch_ffmpeg_video_decoder(text: str):
     return text, changed
 
 
+def patch_ffmpeg_glue(text: str):
+    changed = []
+
+    if 'push_back("hevc")' not in text:
+        h264_push = re.compile(
+            r'(^[ \t]*allowed_decoders\.push_back\(\s*"h264"\s*\)\s*;\s*\n)',
+            re.MULTILINE,
+        )
+        m = h264_push.search(text)
+        if not m:
+            raise RuntimeError("Could not find h264 allowlist entry in ffmpeg_glue.cc")
+        indent_match = re.match(r"^(\s*)", m.group(1))
+        indent = indent_match.group(1) if indent_match else ""
+        text = (
+            text[: m.end()]
+            + f'{indent}allowed_decoders.push_back("hevc");\n'
+            + text[m.end() :]
+        )
+        changed.append("ffmpeg_glue.cc: inserted HEVC decoder allowlist entry")
+
+    audio_additions = [",ac3", ",eac3", ",dca"]
+    missing_audio = [entry for entry in audio_additions if f'"{entry}"' not in text]
+    if missing_audio:
+        aac_add = re.compile(
+            r'(^[ \t]*allowed_decoders\s*\+=\s*",aac"\s*;\s*\n)',
+            re.MULTILINE,
+        )
+        m = aac_add.search(text)
+        if not m:
+            raise RuntimeError("Could not find AAC allowlist entry in ffmpeg_glue.cc")
+        indent_match = re.match(r"^(\s*)", m.group(1))
+        indent = indent_match.group(1) if indent_match else ""
+        insertion = "".join(
+            f'{indent}allowed_decoders += "{entry}";\n' for entry in missing_audio
+        )
+        text = text[: m.end()] + insertion + text[m.end() :]
+        changed.append(
+            "ffmpeg_glue.cc: inserted AC3/EAC3/DCA decoder allowlist entries"
+        )
+
+    return text, changed
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(
         description="Patch Chromium media layer for extra codecs"
@@ -223,6 +266,7 @@ def main() -> int:
         Path("media/base/supported_types.cc"): patch_supported_types,
         Path("media/ffmpeg/ffmpeg_common.cc"): patch_ffmpeg_common,
         Path("media/filters/ffmpeg_video_decoder.cc"): patch_ffmpeg_video_decoder,
+        Path("media/filters/ffmpeg_glue.cc"): patch_ffmpeg_glue,
     }
 
     for p in targets:
