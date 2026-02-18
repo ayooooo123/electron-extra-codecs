@@ -135,6 +135,7 @@ def patch_supported_types(text: str):
 def patch_ffmpeg_common(text: str):
     changed = []
 
+    # ------- Codec ID mappings -------
     if (
         "AV_CODEC_ID_AC3" not in text
         or "AV_CODEC_ID_EAC3" not in text
@@ -163,6 +164,38 @@ def patch_ffmpeg_common(text: str):
             raise RuntimeError("Could not find H264 mapping block in ffmpeg_common.cc")
         text = new_text
         changed.append("ffmpeg_common.cc: inserted HEVC codec ID mapping")
+
+    # ------- Video decoder allowlist (GetAllowedVideoDecoders) -------
+    # Chromium 144 pattern:
+    #   return "h264";
+    # inside GetAllowedVideoDecoders()
+    if '"h264,hevc"' not in text:
+        video_pat = re.compile(r'return\s+"h264"\s*;')
+        text, count = video_pat.subn('return "h264,hevc";', text, count=1)
+        if count:
+            changed.append(
+                "ffmpeg_common.cc: added hevc to GetAllowedVideoDecoders allowlist"
+            )
+        else:
+            # Already patched or different format — not fatal
+            pass
+
+    # ------- Audio decoder allowlist (GetAllowedAudioDecoders) -------
+    # Chromium 144 pattern:
+    #   #define EXTRA_CODECS ",aac"
+    # We add AC3/EAC3/DCA to the EXTRA_CODECS macro.
+    if ",ac3" not in text or ",eac3" not in text or ",dca" not in text:
+        audio_pat = re.compile(r'#define\s+EXTRA_CODECS\s+",aac"')
+        text, count = audio_pat.subn(
+            '#define EXTRA_CODECS ",aac,ac3,eac3,dca"', text, count=1
+        )
+        if count:
+            changed.append(
+                "ffmpeg_common.cc: added ac3/eac3/dca to GetAllowedAudioDecoders allowlist"
+            )
+        else:
+            # Already patched or different format — not fatal
+            pass
 
     return text, changed
 
@@ -206,44 +239,34 @@ def patch_ffmpeg_video_decoder(text: str):
     return text, changed
 
 
-def patch_ffmpeg_glue(text: str):
+def patch_ffmpeg_glue_demuxers(text: str):
+    """Add AC3/EAC3/DTS standalone demuxers to GetAllowedDemuxers() in ffmpeg_glue.cc.
+
+    Chromium 144 pattern:
+        allowed_demuxers.push_back("aac");
+    We insert additional push_back calls after it.
+    """
     changed = []
 
-    if 'push_back("hevc")' not in text:
-        h264_push = re.compile(
-            r'(^[ \t]*allowed_decoders\.push_back\(\s*"h264"\s*\)\s*;\s*\n)',
-            re.MULTILINE,
-        )
-        m = h264_push.search(text)
-        if not m:
-            raise RuntimeError("Could not find h264 allowlist entry in ffmpeg_glue.cc")
-        indent_match = re.match(r"^(\s*)", m.group(1))
-        indent = indent_match.group(1) if indent_match else ""
-        text = (
-            text[: m.end()]
-            + f'{indent}allowed_decoders.push_back("hevc");\n'
-            + text[m.end() :]
-        )
-        changed.append("ffmpeg_glue.cc: inserted HEVC decoder allowlist entry")
+    demuxers_to_add = ["ac3", "eac3", "dts"]
+    missing = [d for d in demuxers_to_add if f'push_back("{d}")' not in text]
 
-    audio_additions = [",ac3", ",eac3", ",dca"]
-    missing_audio = [entry for entry in audio_additions if f'"{entry}"' not in text]
-    if missing_audio:
-        aac_add = re.compile(
-            r'(^[ \t]*allowed_decoders\s*\+=\s*",aac"\s*;\s*\n)',
+    if missing:
+        aac_push = re.compile(
+            r'(^[ \t]*allowed_demuxers\.push_back\(\s*"aac"\s*\)\s*;\s*\n)',
             re.MULTILINE,
         )
-        m = aac_add.search(text)
+        m = aac_push.search(text)
         if not m:
-            raise RuntimeError("Could not find AAC allowlist entry in ffmpeg_glue.cc")
+            raise RuntimeError("Could not find aac demuxer push_back in ffmpeg_glue.cc")
         indent_match = re.match(r"^(\s*)", m.group(1))
-        indent = indent_match.group(1) if indent_match else ""
+        indent = indent_match.group(1) if indent_match else "    "
         insertion = "".join(
-            f'{indent}allowed_decoders += "{entry}";\n' for entry in missing_audio
+            f'{indent}allowed_demuxers.push_back("{d}");\n' for d in missing
         )
         text = text[: m.end()] + insertion + text[m.end() :]
         changed.append(
-            "ffmpeg_glue.cc: inserted AC3/EAC3/DCA decoder allowlist entries"
+            f"ffmpeg_glue.cc: inserted {'/'.join(missing)} demuxer allowlist entries"
         )
 
     return text, changed
@@ -266,7 +289,7 @@ def main() -> int:
         Path("media/base/supported_types.cc"): patch_supported_types,
         Path("media/ffmpeg/ffmpeg_common.cc"): patch_ffmpeg_common,
         Path("media/filters/ffmpeg_video_decoder.cc"): patch_ffmpeg_video_decoder,
-        Path("media/filters/ffmpeg_glue.cc"): patch_ffmpeg_glue,
+        Path("media/filters/ffmpeg_glue.cc"): patch_ffmpeg_glue_demuxers,
     }
 
     for p in targets:

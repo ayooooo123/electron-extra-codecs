@@ -64,8 +64,13 @@ if ! grep -q "AV_CODEC_ID_AC3" media/ffmpeg/ffmpeg_common.cc; then
   pass=false
 fi
 
-if ! grep -q 'push_back("hevc")' media/filters/ffmpeg_glue.cc; then
-  echo "FAIL: HEVC not found in ffmpeg_glue.cc allowlist"
+if ! grep -q '"h264,hevc"' media/ffmpeg/ffmpeg_common.cc; then
+  echo "FAIL: HEVC not found in ffmpeg_common.cc video decoder allowlist"
+  pass=false
+fi
+
+if ! grep -q 'push_back("ac3")' media/filters/ffmpeg_glue.cc; then
+  echo "FAIL: AC3 demuxer not found in ffmpeg_glue.cc allowlist"
   pass=false
 fi
 
