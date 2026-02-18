@@ -150,6 +150,77 @@ GNI_MARKER = "# Extra codec sources for custom Chrome builds (HEVC, AC3, EAC3, D
 IF_BLOCK_RE = re.compile(r"if\s*\((?P<condition>.*?)\)\s*\{", re.DOTALL)
 
 
+# ---- GN basename collision handling -------------------------------------
+
+
+def get_gni_c_basenames(gni_text: str) -> set[str]:
+    """Extract basenames of all .c source files already in the GNI."""
+    basenames: set[str] = set()
+    for match in re.finditer(r'"([^"]+\.c)"', gni_text):
+        basenames.add(match.group(1).rsplit("/", 1)[-1])
+    return basenames
+
+
+def resolve_basename_collisions(
+    sources: list[str],
+    existing_basenames: set[str],
+) -> tuple[list[str], list[tuple[str, str]]]:
+    """Replace sources with colliding basenames with wrapper paths.
+
+    GN cannot have two source files producing the same object file name
+    in a single target.  For collisions we create thin wrapper .c files
+    with unique names that simply ``#include`` the original.
+
+    Returns ``(resolved_sources, wrappers_to_create)``.
+    Each wrapper entry is ``(wrapper_gni_path, include_path)``.
+    """
+    resolved: list[str] = []
+    wrappers: list[tuple[str, str]] = []
+
+    for source in sources:
+        p = Path(source)
+        basename = p.name
+
+        if basename not in existing_basenames:
+            resolved.append(source)
+            existing_basenames.add(basename)
+            continue
+
+        # Collision – build a wrapper with a unique name.
+        # e.g. libavcodec/hevc/cabac.c  →  libavcodec/hevc_cabac.c
+        parent = p.parent  # libavcodec/hevc
+        subdir = parent.name  # hevc
+        grandparent = parent.parent  # libavcodec
+        wrapper_name = f"{subdir}_{basename}"
+        wrapper_path = (grandparent / wrapper_name).as_posix()
+        include_path = f"{subdir}/{basename}"
+
+        resolved.append(wrapper_path)
+        wrappers.append((wrapper_path, include_path))
+        existing_basenames.add(wrapper_name)
+
+    return resolved, wrappers
+
+
+def create_wrapper_files(
+    wrappers: list[tuple[str, str]],
+    dry_run: bool = False,
+) -> None:
+    """Create thin wrapper .c files that ``#include`` the originals."""
+    for wrapper_path, include_path in wrappers:
+        abs_path = FFMPEG_ROOT / wrapper_path
+        if dry_run:
+            print(f"  Would create wrapper: {abs_path}")
+            continue
+        abs_path.parent.mkdir(parents=True, exist_ok=True)
+        content = (
+            "// Auto-generated wrapper to avoid GN basename collision.\n"
+            f'#include "{include_path}"\n'
+        )
+        write_text(abs_path, content)
+        print(f"  Created wrapper: {abs_path} -> {include_path}")
+
+
 def read_text(path: Path) -> str:
     return path.read_text(encoding="utf-8")
 
@@ -345,25 +416,46 @@ def remove_managed_block(text: str) -> str:
     return before + newline
 
 
-def patch_ffmpeg_generated_gni(text: str) -> tuple[str, int, list[str]]:
+def patch_ffmpeg_generated_gni(
+    text: str,
+    check: bool = False,
+) -> tuple[str, int, list[str]]:
     warnings: list[str] = []
 
-    # Filter to files that actually exist on disk
     c_sources = filter_available(EXTRA_C_SOURCES, warnings)
     x86_c_sources = filter_available(EXTRA_X86_C_SOURCES, warnings)
     x86_asm_sources = filter_available(EXTRA_X86_ASM_SOURCES, warnings)
     aarch64_c_sources = filter_available(EXTRA_AARCH64_C_SOURCES, warnings)
     aarch64_gas_sources = filter_available(EXTRA_AARCH64_GAS_SOURCES, warnings)
 
-    # Remove any previous managed block so we don't double-add
     cleaned_text = remove_managed_block(text)
 
-    # Filter out sources already present elsewhere in the GNI
     c_sources = filter_not_in_gni(c_sources, cleaned_text)
     x86_c_sources = filter_not_in_gni(x86_c_sources, cleaned_text)
     x86_asm_sources = filter_not_in_gni(x86_asm_sources, cleaned_text)
     aarch64_c_sources = filter_not_in_gni(aarch64_c_sources, cleaned_text)
     aarch64_gas_sources = filter_not_in_gni(aarch64_gas_sources, cleaned_text)
+
+    existing_basenames = get_gni_c_basenames(cleaned_text)
+    all_wrappers: list[tuple[str, str]] = []
+
+    c_sources, wrappers = resolve_basename_collisions(c_sources, existing_basenames)
+    all_wrappers.extend(wrappers)
+
+    x86_c_sources, wrappers = resolve_basename_collisions(
+        x86_c_sources,
+        existing_basenames,
+    )
+    all_wrappers.extend(wrappers)
+
+    aarch64_c_sources, wrappers = resolve_basename_collisions(
+        aarch64_c_sources,
+        existing_basenames,
+    )
+    all_wrappers.extend(wrappers)
+
+    if all_wrappers:
+        create_wrapper_files(all_wrappers, dry_run=check)
 
     total_added = (
         len(c_sources)
@@ -506,7 +598,10 @@ def main() -> int:
 
     # Patch ffmpeg_generated.gni
     gni_text = read_text(FFMPEG_GENERATED_GNI)
-    gni_updated, gni_added, gni_warnings = patch_ffmpeg_generated_gni(gni_text)
+    gni_updated, gni_added, gni_warnings = patch_ffmpeg_generated_gni(
+        gni_text,
+        check=args.check,
+    )
     gni_changed = gni_updated != gni_text
     if gni_changed and not args.check:
         write_text(FFMPEG_GENERATED_GNI, gni_updated)
