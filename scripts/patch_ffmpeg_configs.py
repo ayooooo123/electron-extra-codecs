@@ -516,25 +516,29 @@ def patch_ffmpeg_build_gn(check: bool = False) -> list[str]:
 
     text = read_text(build_gn)
 
-    include_block_start = re.search(r"include_dirs\s*(?:\+?=)\s*\[", text)
-    if not include_block_start:
-        return ["WARN: Could not find include_dirs block in BUILD.gn"]
+    if '"libavcodec"' in text:
+        return []
 
-    block_open = text.find("[", include_block_start.start())
-    if block_open == -1:
-        return ["WARN: Could not parse include_dirs block in BUILD.gn"]
+    target_match = re.search(
+        r'target\s*\(\s*link_target_type\s*,\s*"ffmpeg_internal"\s*\)', text
+    )
+    if not target_match:
+        return ["WARN: Could not find ffmpeg_internal target in BUILD.gn"]
 
+    search_start = target_match.end()
+    include_match = re.search(r"include_dirs\s*=\s*\[", text[search_start:])
+    if not include_match:
+        return ["WARN: Could not find include_dirs in ffmpeg_internal target"]
+
+    block_open = search_start + include_match.end() - 1
     block_close = text.find("]", block_open)
     if block_close == -1:
         return ["WARN: Could not parse include_dirs block in BUILD.gn"]
 
     block = text[block_open : block_close + 1]
-    if re.search(r'"libavcodec"', block):
-        return []
-
     dot_match = re.search(r'^(?P<indent>\s*)"\."\s*,\s*\n', block, re.MULTILINE)
     if not dot_match:
-        return ["WARN: Could not find include_dirs with '.' entry in BUILD.gn"]
+        return ["WARN: Could not find '.' entry in ffmpeg_internal include_dirs"]
 
     insert_at = block_open + dot_match.end()
     indent = dot_match.group("indent")
@@ -543,9 +547,7 @@ def patch_ffmpeg_build_gn(check: bool = False) -> list[str]:
     if not check:
         write_text(build_gn, new_text)
 
-    return [
-        "BUILD.gn: added 'libavcodec' to include_dirs for HEVC subdirectory support"
-    ]
+    return ["BUILD.gn: added 'libavcodec' to ffmpeg_internal include_dirs"]
 
 
 # ---- Orchestration -------------------------------------------------------
