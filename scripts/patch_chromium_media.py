@@ -62,7 +62,7 @@ def patch_supported_types(text: str):
     text, count = hevc_fn_pat.subn(r"\1\n  return true;\2", text)
     if count:
         changed.append(
-            "supported_types.cc: IsDecoderHevcProfileSupported → return true"
+            "supported_types.cc: IsDecoderHevcProfileSupported -> return true"
         )
 
     # ------- AC3/EAC3: replace IsDecoderDolbyAc3Eac3Supported() body → return true -------
@@ -75,7 +75,7 @@ def patch_supported_types(text: str):
     text, count = ac3_fn_pat.subn(r"\1\n  return true;\2", text)
     if count:
         changed.append(
-            "supported_types.cc: IsDecoderDolbyAc3Eac3Supported → return true"
+            "supported_types.cc: IsDecoderDolbyAc3Eac3Supported -> return true"
         )
 
     # ------- DTS: kDTS / kDTSXP2 / (optional kDTSE) → return true -------
