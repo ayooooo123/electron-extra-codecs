@@ -29,8 +29,11 @@ def patch_supported_types(text: str):
     We accept either name.
 
     Strategy:
-      1. Replace guarded returns (BUILDFLAG / helper function calls) with ``return true;``
-      2. If the cases are entirely absent, insert them as fallthrough to existing AAC/H264 paths.
+      1. Replace helper function BODIES to unconditionally return true (keeps call
+         sites intact, avoids -Wunused-function errors).
+      2. Replace BUILDFLAG() returns at call sites (DTS) with ``return true;``.
+      3. If the cases are entirely absent, insert them as fallthrough to existing
+         AAC/H264 paths.
     """
     changed = []
 
@@ -45,6 +48,34 @@ def patch_supported_types(text: str):
     if not video_fn_found:
         raise RuntimeError(
             "Could not find IsDefault[Decoder]SupportedVideoType in supported_types.cc"
+        )
+
+    # ------- HEVC: replace IsDecoderHevcProfileSupported() body → return true -------
+    # This keeps the function "used" (still called from the switch) but makes it
+    # unconditionally succeed regardless of BUILDFLAG(ENABLE_PLATFORM_HEVC).
+    hevc_fn_pat = re.compile(
+        r"(bool\s+IsDecoderHevcProfileSupported\s*\(\s*const\s+VideoType\s*&\s*type\s*\)\s*\{)"
+        r".*?"
+        r"(\n\})",
+        re.DOTALL,
+    )
+    text, count = hevc_fn_pat.subn(r"\1\n  return true;\2", text)
+    if count:
+        changed.append(
+            "supported_types.cc: IsDecoderHevcProfileSupported → return true"
+        )
+
+    # ------- AC3/EAC3: replace IsDecoderDolbyAc3Eac3Supported() body → return true -------
+    ac3_fn_pat = re.compile(
+        r"(bool\s+IsDecoderDolbyAc3Eac3Supported\s*\(\s*const\s+AudioType\s*&\s*type\s*\)\s*\{)"
+        r".*?"
+        r"(\n\})",
+        re.DOTALL,
+    )
+    text, count = ac3_fn_pat.subn(r"\1\n  return true;\2", text)
+    if count:
+        changed.append(
+            "supported_types.cc: IsDecoderDolbyAc3Eac3Supported → return true"
         )
 
     # ------- DTS: kDTS / kDTSXP2 / (optional kDTSE) → return true -------
@@ -65,38 +96,6 @@ def patch_supported_types(text: str):
     text, count = dts_pat.subn(r"\g<cases>return true;", text)
     if count:
         changed.append(f"supported_types.cc: DTS return override x{count}")
-
-    # ------- AC3/EAC3 → return true -------
-    # Upstream Chromium 144 pattern:
-    #   case AudioCodec::kAC3:
-    #   case AudioCodec::kEAC3:
-    #     return IsDecoderDolbyAc3Eac3Supported(type);
-    ac3_pat = re.compile(
-        r"(?P<cases>"
-        r"case\s+AudioCodec::kAC3:\s*\n"
-        r"\s*case\s+AudioCodec::kEAC3:\s*\n"
-        r"\s*)"
-        r"return\s+IsDecoderDolbyAc3Eac3Supported\s*\(\s*type\s*\)\s*;",
-        re.MULTILINE,
-    )
-    text, count = ac3_pat.subn(r"\g<cases>return true;", text)
-    if count:
-        changed.append(f"supported_types.cc: AC3/EAC3 return override x{count}")
-
-    # ------- HEVC → return true -------
-    # Upstream Chromium 144 pattern:
-    #   case VideoCodec::kHEVC:
-    #     return IsDecoderHevcProfileSupported(type);
-    hevc_pat = re.compile(
-        r"(?P<cases>"
-        r"case\s+VideoCodec::kHEVC:\s*\n"
-        r"\s*)"
-        r"return\s+IsDecoderHevcProfileSupported\s*\(\s*type\s*\)\s*;",
-        re.MULTILINE,
-    )
-    text, count = hevc_pat.subn(r"\g<cases>return true;", text)
-    if count:
-        changed.append(f"supported_types.cc: HEVC return override x{count}")
 
     # ------- Fallback insertion: audio codecs -------
     # If the cases were not present at all (already stripped or different layout),
