@@ -62,7 +62,7 @@ jobs:
   build_linux:
     name: Build ${{ matrix.name }}
     needs: validate
-    runs-on: ${{ matrix.runner }}
+    runs-on: ubuntu-latest
     timeout-minutes: 360
     strategy:
       fail-fast: false
@@ -73,12 +73,10 @@ jobs:
             target_os: linux
             target_cpu: arm64
             artifact: electron-linux-arm64.zip
-            runner: ubuntu-24.04-arm
           - name: linux-x64
             target_os: linux
             target_cpu: x64
             artifact: electron-linux-x64.zip
-            runner: ubuntu-latest
 
     steps:
       - name: Checkout patch repo
