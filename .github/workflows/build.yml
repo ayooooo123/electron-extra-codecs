@@ -66,7 +66,7 @@ jobs:
     timeout-minutes: 360
     strategy:
       fail-fast: false
-      max-parallel: 3
+      max-parallel: 1
       matrix:
         include:
           - name: linux-arm64
@@ -171,11 +171,11 @@ jobs:
         working-directory: src
         run: |
           export CHROMIUM_BUILDTOOLS_PATH="$PWD/buildtools"
-          gn_args='import("//electron/build/args/release.gn") target_cpu="${{ matrix.target_cpu }}" enable_platform_hevc=true enable_hevc_parser_and_hw_decoder=true enable_platform_ac3_eac3_audio=true enable_platform_dts_audio=true'
+          gn_args='import("//electron/build/args/release.gn") target_cpu="${{ matrix.target_cpu }}" enable_platform_hevc=true enable_hevc_parser_and_hw_decoder=true enable_platform_ac3_eac3_audio=true enable_platform_dts_audio=true symbol_level=0 blink_symbol_level=0 enable_nacl=false'
           gn gen out/Release --args="$gn_args"
-          ninja -C out/Release electron
+          ninja -C out/Release -j$(nproc) electron
           python3 electron/script/strip-binaries.py -d out/Release || true
-          ninja -C out/Release electron:electron_dist_zip
+          ninja -C out/Release -j$(nproc) electron:electron_dist_zip
 
       - name: Rename dist artifact
         run: cp src/out/Release/dist.zip "${{ matrix.artifact }}"
@@ -255,11 +255,15 @@ jobs:
           enable_hevc_parser_and_hw_decoder = true
           enable_platform_ac3_eac3_audio = true
           enable_platform_dts_audio = true
+          symbol_level = 0
+          blink_symbol_level = 0
+          enable_nacl = false
           '@ | Set-Content out/Release/args.gn
           gn gen out/Release
-          ninja -C out/Release electron
-          python3 electron/script/strip-binaries.py -d out/Release || true
-          ninja -C out/Release electron:electron_dist_zip
+          $numCores = (Get-CimInstance Win32_Processor).NumberOfLogicalProcessors
+          ninja -C out/Release "-j$numCores" electron
+          python3 electron/script/strip-binaries.py -d out/Release 2>$null; $true
+          ninja -C out/Release "-j$numCores" electron:electron_dist_zip
 
       - name: Rename dist artifact
         shell: pwsh
