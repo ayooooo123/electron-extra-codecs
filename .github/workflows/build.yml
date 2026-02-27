@@ -1,14 +1,26 @@
 # =============================================================================
 #
-# macOS builds run on Cirrus CI (see .cirrus.yml) and upload to the same
-# GitHub Release via the gh CLI.
+# Full Electron build with extra codecs (HEVC, AC3, EAC3, DTS).
+# Requires GitHub-hosted larger runners (~16-core) to finish within timeout.
 #
-# Self-hosted runner requirements:
-#   Label: "electron-builder"
-#   OS:    Fedora 39+ / Ubuntu 22.04+ (arm64)
-#   Disk:  200+ GB SSD
-#   RAM:   32+ GB
-#   Deps:  build-essential, python3, git, curl + Chromium build deps
+# SETUP (required before first run):
+#   1. Go to repo Settings > Actions > Runners > New GitHub-hosted runner
+#   2. Create a Linux runner:  Ubuntu 22.04, 16-core, label "linux-16-core"
+#   3. Create a Windows runner: Windows Server 2022, 16-core, label "windows-16-core"
+#   4. Go to repo Settings > Secrets and variables > Actions > Variables
+#   5. Add repository variables:
+#        LINUX_RUNNER   = linux-16-core
+#        WINDOWS_RUNNER = windows-16-core
+#
+# Cost estimate (16-core runners, ~2.5h per target):
+#   Linux:   $0.064/min  x  150 min  =  ~$9.60/target
+#   Windows: $0.128/min  x  150 min  =  ~$19.20/target
+#   Total per CI run (3 targets parallel): ~$38
+#
+# Without the repo variables, falls back to ubuntu-latest / windows-latest
+# (free 4-core runners — will likely time out at 6h).
+#
+# macOS builds run on Cirrus CI (see .cirrus.yml).
 # =============================================================================
 
 name: Build Electron Extra Codecs
@@ -62,11 +74,11 @@ jobs:
   build_linux:
     name: Build ${{ matrix.name }}
     needs: validate
-    runs-on: ubuntu-latest
+    runs-on: ${{ vars.LINUX_RUNNER || 'ubuntu-latest' }}
     timeout-minutes: 360
     strategy:
       fail-fast: false
-      max-parallel: 1
+      max-parallel: 3
       matrix:
         include:
           - name: linux-arm64
@@ -171,7 +183,7 @@ jobs:
         working-directory: src
         run: |
           export CHROMIUM_BUILDTOOLS_PATH="$PWD/buildtools"
-          gn_args='import("//electron/build/args/release.gn") target_cpu="${{ matrix.target_cpu }}" enable_platform_hevc=true enable_hevc_parser_and_hw_decoder=true enable_platform_ac3_eac3_audio=true enable_platform_dts_audio=true symbol_level=0 blink_symbol_level=0 enable_nacl=false'
+          gn_args='import("//electron/build/args/release.gn") target_cpu="${{ matrix.target_cpu }}" enable_platform_hevc=true enable_hevc_parser_and_hw_decoder=true enable_platform_ac3_eac3_audio=true enable_platform_dts_audio=true symbol_level=0 blink_symbol_level=0 enable_nacl=false chrome_pgo_phase=0'
           gn gen out/Release --args="$gn_args"
           ninja -C out/Release -j$(nproc) electron
           python3 electron/script/strip-binaries.py -d out/Release || true
@@ -194,7 +206,7 @@ jobs:
   build_windows:
     name: Build win32-x64
     needs: validate
-    runs-on: windows-latest
+    runs-on: ${{ vars.WINDOWS_RUNNER || 'windows-latest' }}
     timeout-minutes: 360
     env:
       DEPOT_TOOLS_WIN_TOOLCHAIN: "0"
@@ -258,6 +270,7 @@ jobs:
           symbol_level = 0
           blink_symbol_level = 0
           enable_nacl = false
+          chrome_pgo_phase = 0
           '@ | Set-Content out/Release/args.gn
           gn gen out/Release
           $numCores = (Get-CimInstance Win32_Processor).NumberOfLogicalProcessors
@@ -314,7 +327,7 @@ jobs:
 
             ## Downloads (Linux + Windows)
 
-            Built on GitHub-hosted x64 Linux runners.
+            Built on GitHub-hosted larger runners.
             macOS builds are added separately via Cirrus CI (see `.cirrus.yml`).
 
             | Platform | File |
